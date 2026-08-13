@@ -732,4 +732,3 @@ function runSystemDiagnostics() {
             <div style="color:var(--good);font-weight:700;margin-top:6px;">ระบบทั้งหมดทำงานสมบูรณ์ 100%!</div>
         </div>
     `;
-}
