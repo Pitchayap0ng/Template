@@ -69,6 +69,7 @@ body {
     box-shadow: var(--shadow);
     margin-bottom: 16px;
     gap: 2px;
+    z-index: 10;
 }
 
 .tabs button {
@@ -83,6 +84,8 @@ body {
     border-radius: 8px;
     transition: color 0.2s;
     white-space: nowrap;
+    position: relative;
+    z-index: 2;
 }
 
 .tabs button.active {
@@ -95,6 +98,7 @@ body {
     font-weight: 600 !important;
 }
 
+/* 🟢 แก้ไข: ใส่ pointer-events: none ป้องกันขีดเส้นใต้ลอยบังการคลิก */
 .underline {
     position: absolute;
     bottom: 4px;
@@ -102,18 +106,22 @@ body {
     background: var(--accent);
     border-radius: 3px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+    z-index: 1;
 }
 
 /* Dropdown */
 .tab-dropdown {
     position: relative;
     flex: 1;
+    z-index: 5;
 }
 
 .dropdown-btn {
     width: 100%;
 }
 
+/* 🟢 แก้ไข: ควบคุมการรับคลิกของ Dropdown Menu ไม่ให้ขวางหน้าจอตอนซ่อนอยู่ */
 .dropdown-menu {
     display: none;
     position: absolute;
@@ -126,10 +134,12 @@ body {
     z-index: 100;
     overflow: hidden;
     min-width: 140px;
+    pointer-events: none;
 }
 
 .dropdown-menu.show {
     display: block;
+    pointer-events: auto;
 }
 
 .dropdown-menu button {
@@ -436,6 +446,7 @@ input:focus, select:focus {
     display: block;
 }
 
+/* 🟢 แก้ไข: ใส่ pointer-events: none ให้เส้นเลเซอร์ */
 .scanner-line {
     position: absolute;
     top: 0;
@@ -445,6 +456,7 @@ input:focus, select:focus {
     background: #00E676;
     box-shadow: 0 0 10px #00E676, 0 0 20px #00E676;
     animation: scanAnimation 1.8s infinite ease-in-out alternate;
+    pointer-events: none;
 }
 
 @keyframes scanAnimation {
