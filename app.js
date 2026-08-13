@@ -729,6 +729,9 @@ function runSystemDiagnostics() {
             <div>✅ Canvas Compressor: พร้อมใช้งาน</div>
             <div>✅ Tesseract.js OCR Engine: พร้อมใช้งาน</div>
             <div>✅ SweetAlert2 & GSAP: โหลดเรียบร้อย</div>
-            <div style="color:var(--good);font-weight:700;margin-top:6px;">ระบบทั้งหมดทำงานสมบูรณ์ 100%!</div>
+            <div style="color:var(--good);font-weight:700;margin-top:6px;">
+                ระบบทั้งหมดทำงานสมบูรณ์ 100%!
+            </div>
         </div>
     `;
+}
