@@ -3,264 +3,968 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Template</title>
-    
-    <!-- Fonts & External Libraries -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <title>Finance Manager</title>
+
+    <!-- ใช้ CSS เดิมของคุณ -->
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-    
-    <!-- Tesseract.js Engine สำหรับอ่านสลิป (OCR) -->
+
+    <!-- OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-
-    <!-- CSS External File -->
-    <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
-    <div class="wrap">
 
-        <header class="top">
-            <div style="display:flex;align-items:center;gap:10px;">
-                <h1>Templat</h1>
-                <span class="status-badge" id="net-status">Online</span>
+<div class="wrap">
+
+    <!-- ==========================================
+         HEADER
+    =========================================== -->
+    <header class="top">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <h1>Finance Manager</h1>
+            <span class="status-badge" id="net-status">Online</span>
+        </div>
+
+        <span id="rangeLabel"></span>
+    </header>
+
+
+    <!-- ==========================================
+         NAVIGATION
+    =========================================== -->
+    <nav class="tabs" id="tabs">
+
+        <button data-page="dashboard" class="active">
+            ภาพรวม
+        </button>
+
+        <button data-page="add">
+            บันทึกรายจ่าย
+        </button>
+
+        <button data-page="scan" class="scan-tab-btn">
+            📸 สแกนสลิป
+        </button>
+
+        <button data-page="transactions">
+            รายการ
+        </button>
+
+        <div class="tab-dropdown" id="tabDropdown">
+
+            <button class="dropdown-btn" id="dropdownBtn">
+                เพิ่มเติม ▾
+            </button>
+
+            <div class="dropdown-menu" id="dropdownMenu">
+
+                <button data-page="analysis">
+                    วิเคราะห์ 50/30/20
+                </button>
+
+                <button data-page="activitylog">
+                    ประวัติกิจกรรม
+                </button>
+
+                <button data-page="tax">
+                    คำนวณภาษี
+                </button>
+
+                <button
+                    data-page="test"
+                    style="color:var(--danger);font-weight:600;"
+                >
+                    🛠️ ทดสอบระบบ
+                </button>
+
             </div>
-            <span id="rangeLabel"></span>
-        </header>
+        </div>
 
-        <!-- TABS NAV -->
-        <nav class="tabs" id="tabs">
-            <button data-page="dashboard" class="active">ภาพรวม</button>
-            <button data-page="add">บันทึกรายจ่าย</button>
-            <button data-page="scan" class="scan-tab-btn">📸 สแกนสลิป</button>
-            <button data-page="transactions">รายการ</button>
+        <div class="underline" id="underline"></div>
 
-            <div class="tab-dropdown" id="tabDropdown">
-                <button class="dropdown-btn" id="dropdownBtn">เพิ่มเติม ▾</button>
-                <div class="dropdown-menu" id="dropdownMenu">
-                    <button data-page="analysis">วิเคราะห์ 50/30/20</button>
-                    <button data-page="activitylog">ประวัติกิจกรรม</button>
-                    <button data-page="tax">คำนวณภาษี</button>
-                    <button data-page="test" style="color:var(--danger);font-weight:600;">🛠️ ทดสอบระบบ</button>
+    </nav>
+
+
+    <!-- ==========================================
+         1. DASHBOARD
+    =========================================== -->
+    <section class="page active" id="dashboard">
+
+        <div class="monthbar">
+
+            <button
+                class="nav-btn"
+                onclick="shiftMonth(-1)"
+            >
+                ‹
+            </button>
+
+            <div class="label" id="monthLabel"></div>
+
+            <button
+                class="nav-btn"
+                onclick="shiftMonth(1)"
+            >
+                ›
+            </button>
+
+        </div>
+
+
+        <div class="summary-grid">
+
+            <div class="stat">
+
+                <div class="lbl">
+                    รายรับเดือนนี้
                 </div>
+
+                <input
+                    type="number"
+                    id="incomeInput"
+                    placeholder="0.00"
+                    inputmode="decimal"
+                >
+
             </div>
 
-            <div class="underline" id="underline"></div>
-        </nav>
 
-        <!-- 1. DASHBOARD PAGE -->
-        <section class="page active" id="dashboard">
-            <div class="monthbar">
-                <button class="nav-btn" onclick="shiftMonth(-1)">‹</button>
-                <div class="label" id="monthLabel"></div>
-                <button class="nav-btn" onclick="shiftMonth(1)">›</button>
+            <div class="stat">
+
+                <div class="lbl">
+                    รายจ่ายรวม
+                </div>
+
+                <div
+                    class="val neg"
+                    id="totalExpenseVal"
+                >
+                    ฿0.00
+                </div>
+
             </div>
 
-            <div class="summary-grid">
-                <div class="stat">
-                    <div class="lbl">รายรับเดือนนี้</div>
-                    <input type="number" id="incomeInput" placeholder="0.00" inputmode="decimal">
+
+            <div class="stat">
+
+                <div class="lbl">
+                    คงเหลือ
                 </div>
-                <div class="stat">
-                    <div class="lbl">รายจ่ายรวม</div>
-                    <div class="val neg" id="totalExpenseVal">฿0.00</div>
+
+                <div
+                    class="val"
+                    id="remainingVal"
+                >
+                    ฿0.00
                 </div>
-                <div class="stat">
-                    <div class="lbl">คงเหลือ</div>
-                    <div class="val" id="remainingVal">฿0.00</div>
-                </div>
+
             </div>
 
-            <div class="card">
-                <div class="lbl" style="font-size:13px;color:var(--muted);margin-bottom:12px;font-weight:600;">สัดส่วนรายจ่ายตามหมวดหมู่</div>
-                <div class="donut-row">
-                    <div class="donut" id="donut"></div>
-                    <div class="legend" id="legend"></div>
-                </div>
+        </div>
+
+
+        <!-- DONUT -->
+        <div class="card">
+
+            <div
+                class="lbl"
+                style="font-size:13px;color:var(--muted);margin-bottom:12px;font-weight:600;"
+            >
+                สัดส่วนรายจ่ายตามหมวดหมู่
             </div>
-        </section>
 
-        <!-- 2. SCAN SLIP PAGE (หน้าสแกนและอ่านสลิปอัตโนมัติ) -->
-        <section class="page" id="scan">
-            <div class="card">
-                <h3 style="margin-top:0;">📸 แนบสลิปอ่านค่า & บันทึกอัตโนมัติ</h3>
-                <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
-                    อัปโหลดสลิปธนาคาร ระบบจะอ่านยอดเงิน วันที่ และวิเคราะห์หมวดหมู่อัตโนมัติโดยประมวลผลในเครื่องของคุณ
-                </p>
+            <div class="donut-row">
 
-                <div class="scan-dropzone" id="scanDropzone">
-                    <input type="file" id="scanFileInput" accept="image/*" style="display:none;">
-                    <div class="dropzone-content" id="dropzoneContent">
-                        <span style="font-size:40px;">🧾</span>
-                        <p style="margin:8px 0;font-weight:600;color:var(--text);">แตะหรือลากรูปสลิปมาวางที่นี่</p>
-                        <span style="font-size:12px;color:var(--muted);">รองรับ KBANK, SCB, Krungthai, Bangkok Bank, PromptPay ฯลฯ</span>
-                    </div>
-                </div>
+                <div
+                    class="donut"
+                    id="donut"
+                ></div>
 
-                <!-- Preview + Laser Scanner -->
-                <div class="scan-preview-box" id="scanPreviewBox" style="display:none;">
-                    <div class="img-wrapper">
-                        <img id="scanPreviewImg" src="" alt="Slip Preview">
-                        <div class="scanner-line" id="scannerLine"></div>
-                    </div>
-                    <div class="scan-status" id="scanStatus">
-                        <div class="spinner"></div>
-                        <span id="scanProgressTxt">กำลังเตรียมระบบอ่านสลิป...</span>
-                    </div>
-                </div>
+                <div
+                    class="legend"
+                    id="legend"
+                ></div>
 
-                <!-- Result & Auto-Save -->
-                <div class="scan-result-card" id="scanResultCard" style="display:none;">
-                    <h4 style="margin:0 0 12px;color:var(--good);display:flex;align-items:center;gap:6px;">
-                        <span>✅</span> อ่านข้อมูลสลิปสำเร็จ!
-                    </h4>
-                    <div class="result-fields">
-                        <div class="field">
-                            <label>จำนวนเงิน (บาท)</label>
-                            <input type="number" id="resAmount" step="0.01">
-                        </div>
-                        <div class="field">
-                            <label>วันที่รายการ</label>
-                            <input type="date" id="resDate">
-                        </div>
-                        <div class="field">
-                            <label>หมวดหมู่ (วิเคราะห์อัตโนมัติ)</label>
-                            <select id="resCategory"></select>
-                        </div>
-                        <div class="field">
-                            <label>รายละเอียด / โน้ต</label>
-                            <input type="text" id="resNote">
-                        </div>
-                    </div>
-                    <div style="display:flex;gap:10px;margin-top:16px;">
-                        <button class="btn" id="confirmSaveBtn" style="flex:1;">💾 ยืนยันบันทึกรายการ</button>
-                        <button class="btn" id="reScanBtn" style="background:var(--muted);width:auto;">🔄 สแกนใหม่</button>
-                    </div>
-                </div>
             </div>
-        </section>
 
-        <!-- 3. ADD MANUAL PAGE -->
-        <section class="page" id="add">
-            <div class="card">
-                <form class="entry" id="entryForm">
+        </div>
+
+
+        <!-- GRAPH -->
+        <div class="card" id="incomeExpenseChartCard">
+
+            <div
+                style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;"
+            >
+
+                <div
+                    class="lbl"
+                    style="font-size:13px;color:var(--muted);font-weight:600;"
+                >
+                    📊 กราฟรายรับ vs รายจ่าย
+                </div>
+
+                <div style="display:flex;gap:6px;">
+
+                    <button
+                        type="button"
+                        class="btn-sm"
+                        id="chartDailyBtn"
+                    >
+                        รายวัน
+                    </button>
+
+                    <button
+                        type="button"
+                        class="btn-sm"
+                        id="chartMonthlyBtn"
+                    >
+                        รายเดือน
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <div
+                style="width:100%;height:300px;margin-top:12px;"
+            >
+
+                <canvas
+                    id="incomeExpenseChart"
+                    style="width:100%;height:100%;display:block;"
+                ></canvas>
+
+            </div>
+
+
+            <div
+                id="chartSummary"
+                style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;"
+            ></div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ==========================================
+         2. SCAN SLIP
+    =========================================== -->
+    <section class="page" id="scan">
+
+        <div class="card">
+
+            <h3 style="margin-top:0;">
+                📸 สแกนสลิปธนาคาร
+            </h3>
+
+            <p
+                style="font-size:13px;color:var(--muted);margin-bottom:16px;"
+            >
+                สามารถเลือกสลิปหลายรูปพร้อมกันได้
+                ระบบจะ OCR ทีละใบและให้ตรวจสอบข้อมูลก่อนบันทึก
+            </p>
+
+
+            <div
+                class="scan-dropzone"
+                id="scanDropzone"
+            >
+
+                <input
+                    type="file"
+                    id="scanFileInput"
+                    accept="image/*"
+                    multiple
+                    style="display:none;"
+                >
+
+                <div
+                    class="dropzone-content"
+                    id="dropzoneContent"
+                >
+
+                    <span style="font-size:40px;">
+                        🧾
+                    </span>
+
+                    <p
+                        style="margin:8px 0;font-weight:600;color:var(--text);"
+                    >
+                        แตะหรือลากรูปสลิปมาวางที่นี่
+                    </p>
+
+                    <span
+                        style="font-size:12px;color:var(--muted);"
+                    >
+                        รองรับ KBANK, SCB, Krungthai,
+                        Bangkok Bank, PromptPay ฯลฯ
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <!-- SINGLE PREVIEW -->
+            <div
+                class="scan-preview-box"
+                id="scanPreviewBox"
+                style="display:none;"
+            >
+
+                <div class="img-wrapper">
+
+                    <img
+                        id="scanPreviewImg"
+                        src=""
+                        alt="Slip Preview"
+                    >
+
+                    <div
+                        class="scanner-line"
+                        id="scannerLine"
+                    ></div>
+
+                </div>
+
+
+                <div
+                    class="scan-status"
+                    id="scanStatus"
+                >
+
+                    <div class="spinner"></div>
+
+                    <span id="scanProgressTxt">
+                        กำลังเตรียมระบบอ่านสลิป...
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <!-- SINGLE RESULT -->
+            <div
+                class="scan-result-card"
+                id="scanResultCard"
+                style="display:none;"
+            >
+
+                <h4
+                    style="margin:0 0 12px;color:var(--good);display:flex;align-items:center;gap:6px;"
+                >
+                    <span>✅</span>
+                    ตรวจสอบข้อมูลสลิป
+                </h4>
+
+
+                <div class="result-fields">
+
                     <div class="field">
-                        <label>วันที่</label>
-                        <input type="date" id="fDate" required>
+
+                        <label>
+                            จำนวนเงิน
+                        </label>
+
+                        <input
+                            type="number"
+                            id="resAmount"
+                            step="0.01"
+                        >
+
                     </div>
+
 
                     <div class="field">
-                        <label>จำนวนเงิน (บาท)</label>
-                        <input type="number" id="fAmount" placeholder="0.00" step="0.01" min="0" required inputmode="decimal">
+
+                        <label>
+                            วันที่
+                        </label>
+
+                        <input
+                            type="date"
+                            id="resDate"
+                        >
+
                     </div>
+
 
                     <div class="field">
-                        <label>หมวดหมู่</label>
-                        <div class="cat-grid" id="catGrid"></div>
+
+                        <label>
+                            เวลา
+                        </label>
+
+                        <input
+                            type="time"
+                            id="resTime"
+                        >
+
                     </div>
+
 
                     <div class="field">
-                        <label>ประเภทการจ่าย</label>
-                        <div class="type-row">
-                            <label id="typeCashLbl"><input type="radio" name="type" value="cash" checked><span>เงินสด</span></label>
-                            <label id="typeTransferLbl"><input type="radio" name="type" value="transfer"><span>โอน/บัตร</span></label>
-                        </div>
+
+                        <label>
+                            หมวดหมู่
+                        </label>
+
+                        <select id="resCategory"></select>
+
                     </div>
+
 
                     <div class="field">
-                        <label>โน้ต (ถ้ามี)</label>
-                        <input type="text" id="fNote" placeholder="เช่น ข้าวเที่ยง, ซื้อของใช้เข้าบ้าน">
+
+                        <label>
+                            ผู้โอน
+                        </label>
+
+                        <input
+                            type="text"
+                            id="resSender"
+                            placeholder="ถ้าอ่านได้"
+                        >
+
                     </div>
+
 
                     <div class="field">
-                        <label>แนบรูปสลิป/ใบเสร็จ (ไม่บังคับ)</label>
-                        <div class="upload-box" id="uploadBox">
-                            <span class="txt" id="uploadTxt">📷 แตะเพื่อแนบรูปสลิปเก็บไว้</span>
-                            <input type="file" accept="image/*" id="fReceipt" style="display:none">
-                        </div>
+
+                        <label>
+                            ผู้รับ
+                        </label>
+
+                        <input
+                            type="text"
+                            id="resReceiver"
+                            placeholder="ถ้าอ่านได้"
+                        >
+
                     </div>
 
-                    <button class="btn" type="submit">บันทึกรายการ</button>
-                </form>
-            </div>
-        </section>
 
-        <!-- 4. TRANSACTIONS PAGE -->
-        <section class="page" id="transactions">
-            <div class="monthbar">
-                <div style="display:flex;gap:8px;align-items:center">
-                    <button class="nav-btn" onclick="shiftMonth(-1)">‹</button>
-                    <div class="label" id="monthLabel2"></div>
-                    <button class="nav-btn" onclick="shiftMonth(1)">›</button>
+                    <div class="field">
+
+                        <label>
+                            รายละเอียด / โน้ต
+                        </label>
+
+                        <input
+                            type="text"
+                            id="resNote"
+                        >
+
+                    </div>
+
                 </div>
+
+
+                <div
+                    style="display:flex;gap:10px;margin-top:16px;"
+                >
+
+                    <button
+                        class="btn"
+                        id="confirmSaveBtn"
+                        style="flex:1;"
+                    >
+                        💾 ยืนยันบันทึกรายการ
+                    </button>
+
+                    <button
+                        class="btn"
+                        id="reScanBtn"
+                        style="background:var(--muted);width:auto;"
+                    >
+                        🔄 สแกนใหม่
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- MULTI OCR -->
+        <div
+            class="card"
+            id="multiScanPanel"
+            style="margin-top:14px;"
+        >
+
+            <div
+                style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;"
+            >
+
                 <div>
-                    <button class="btn-sm" id="exportCsv">📥 ส่งออก CSV</button>
+
+                    <h4 style="margin:0 0 4px;">
+                        🧾 สแกนหลายสลิปพร้อมกัน
+                    </h4>
+
+                    <div
+                        style="font-size:12px;color:var(--muted);"
+                    >
+                        เลือกหลายรูป ระบบจะอ่านทีละใบ
+                        แล้วให้ตรวจสอบก่อนบันทึกทั้งหมด
+                    </div>
+
                 </div>
-            </div>
-            <div id="txList"></div>
-        </section>
 
-        <!-- 5. ANALYSIS PAGE -->
-        <section class="page" id="analysis">
-            <div class="monthbar">
-                <button class="nav-btn" onclick="shiftMonth(-1)">‹</button>
-                <div class="label" id="monthLabel3"></div>
-                <button class="nav-btn" onclick="shiftMonth(1)">›</button>
-            </div>
 
-            <div class="card insight-box">
-                <h3>วิเคราะห์สัดส่วนตามหลัก 50/30/20</h3>
-                <div id="barRows"></div>
+                <button
+                    class="btn-sm"
+                    type="button"
+                    id="multiScanSelectBtn"
+                >
+                    ➕ เลือกหลายรูป
+                </button>
+
             </div>
 
-            <div class="card insight-box">
-                <h3>คำแนะนำทางการเงิน</h3>
-                <ul class="tips" id="tipsList"></ul>
-            </div>
-        </section>
 
-        <!-- 6. TAX CALCULATOR PAGE -->
-        <section class="page" id="tax">
-            <div class="card">
-                <h3>คำนวณภาษีเงินได้บุคคลธรรมดา</h3>
+            <div
+                id="multiScanProgress"
+                style="margin-top:12px;font-size:12px;color:var(--muted);"
+            ></div>
+
+
+            <div
+                id="multiScanResults"
+                style="display:grid;gap:10px;margin-top:12px;"
+            ></div>
+
+
+            <div
+                id="multiScanActions"
+                style="display:none;gap:8px;margin-top:14px;"
+            >
+
+                <button
+                    class="btn"
+                    type="button"
+                    id="saveAllScansBtn"
+                    style="flex:1;"
+                >
+                    💾 ยืนยันบันทึกทั้งหมด
+                </button>
+
+                <button
+                    class="btn"
+                    type="button"
+                    id="clearAllScansBtn"
+                    style="background:var(--muted);width:auto;"
+                >
+                    🗑️ ล้างผลลัพธ์
+                </button>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ==========================================
+         3. MANUAL ADD
+    =========================================== -->
+    <section class="page" id="add">
+
+        <div class="card">
+
+            <form
+                class="entry"
+                id="entryForm"
+            >
+
                 <div class="field">
-                    <label>รายได้ทั้งปี (บาท)</label>
-                    <input type="number" id="taxIncome" placeholder="0.00" inputmode="numeric">
+
+                    <label>
+                        วันที่
+                    </label>
+
+                    <input
+                        type="date"
+                        id="fDate"
+                        required
+                    >
+
                 </div>
+
+
                 <div class="field">
-                    <label>ค่าลดหย่อนรวม (บาท)</label>
-                    <input type="number" id="taxDeduct" value="60000" inputmode="numeric">
+
+                    <label>
+                        จำนวนเงิน
+                    </label>
+
+                    <input
+                        type="number"
+                        id="fAmount"
+                        placeholder="0.00"
+                        step="0.01"
+                        min="0"
+                        required
+                        inputmode="decimal"
+                    >
+
                 </div>
-                <button class="btn" id="taxCalcBtn">คำนวณภาษี</button>
-                <div id="taxResult" class="empty" style="margin-top:16px;"></div>
+
+
+                <div class="field">
+
+                    <label>
+                        หมวดหมู่
+                    </label>
+
+                    <div
+                        class="cat-grid"
+                        id="catGrid"
+                    ></div>
+
+                </div>
+
+
+                <div class="field">
+
+                    <label>
+                        ประเภทการจ่าย
+                    </label>
+
+                    <div class="type-row">
+
+                        <label id="typeCashLbl">
+
+                            <input
+                                type="radio"
+                                name="type"
+                                value="cash"
+                                checked
+                            >
+
+                            <span>
+                                เงินสด
+                            </span>
+
+                        </label>
+
+
+                        <label id="typeTransferLbl">
+
+                            <input
+                                type="radio"
+                                name="type"
+                                value="transfer"
+                            >
+
+                            <span>
+                                โอน/บัตร
+                            </span>
+
+                        </label>
+
+                    </div>
+
+                </div>
+
+
+                <div class="field">
+
+                    <label>
+                        โน้ต
+                    </label>
+
+                    <input
+                        type="text"
+                        id="fNote"
+                        placeholder="เช่น ข้าวเที่ยง, ซื้อของใช้เข้าบ้าน"
+                    >
+
+                </div>
+
+
+                <button
+                    class="btn"
+                    type="submit"
+                >
+                    💾 บันทึกรายการ
+                </button>
+
+            </form>
+
+        </div>
+
+    </section>
+
+
+    <!-- ==========================================
+         4. TRANSACTIONS
+    =========================================== -->
+    <section
+        class="page"
+        id="transactions"
+    >
+
+        <div class="monthbar">
+
+            <div
+                style="display:flex;gap:8px;align-items:center;"
+            >
+
+                <button
+                    class="nav-btn"
+                    onclick="shiftMonth(-1)"
+                >
+                    ‹
+                </button>
+
+                <div
+                    class="label"
+                    id="monthLabel2"
+                ></div>
+
+                <button
+                    class="nav-btn"
+                    onclick="shiftMonth(1)"
+                >
+                    ›
+                </button>
+
             </div>
-        </section>
 
-        <!-- 7. ACTIVITY LOG PAGE -->
-        <section class="page" id="activitylog">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                <h3 style="margin:0;">ประวัติการใช้งาน</h3>
-                <button class="btn-sm" id="exportLogsBtn">📥 ส่งออก ประวัติ CSV</button>
+
+            <div>
+
+                <button
+                    class="btn-sm"
+                    id="exportCsv"
+                >
+                    📥 ส่งออก CSV
+                </button>
+
             </div>
-            <div id="logList" class="tx-day"></div>
-        </section>
 
-        <!-- 8. SYSTEM TEST PAGE -->
-        <section class="page" id="test">
-            <div class="card">
-                <h3>🛠️ ศูนย์ทดสอบและวินิจฉัยระบบ (Diagnostics)</h3>
-                <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
-                    กดปุ่มเพื่อทดสอบการทำงานของหน่วยความจำ, การคำนวณ และระบบ OCR สแกนสลิป
-                </p>
-                <button class="btn" id="runTestBtn" style="background:#333;">เริ่มทดสอบระบบทั้งหมด</button>
+        </div>
 
-                <div id="testResultsList" style="margin-top:16px;"></div>
+
+        <div id="txList"></div>
+
+    </section>
+
+
+    <!-- ==========================================
+         5. ANALYSIS
+    =========================================== -->
+    <section
+        class="page"
+        id="analysis"
+    >
+
+        <div class="monthbar">
+
+            <button
+                class="nav-btn"
+                onclick="shiftMonth(-1)"
+            >
+                ‹
+            </button>
+
+            <div
+                class="label"
+                id="monthLabel3"
+            ></div>
+
+            <button
+                class="nav-btn"
+                onclick="shiftMonth(1)"
+            >
+                ›
+            </button>
+
+        </div>
+
+
+        <div class="card insight-box">
+
+            <h3>
+                วิเคราะห์สัดส่วนตามหลัก 50/30/20
+            </h3>
+
+            <div id="barRows"></div>
+
+        </div>
+
+
+        <div class="card insight-box">
+
+            <h3>
+                คำแนะนำทางการเงิน
+            </h3>
+
+            <ul
+                class="tips"
+                id="tipsList"
+            ></ul>
+
+        </div>
+
+    </section>
+
+
+    <!-- ==========================================
+         6. TAX
+    =========================================== -->
+    <section
+        class="page"
+        id="tax"
+    >
+
+        <div class="card">
+
+            <h3>
+                คำนวณภาษีเงินได้บุคคลธรรมดา
+            </h3>
+
+
+            <div class="field">
+
+                <label>
+                    รายได้ทั้งปี
+                </label>
+
+                <input
+                    type="number"
+                    id="taxIncome"
+                    placeholder="0.00"
+                    inputmode="numeric"
+                >
+
             </div>
-        </section>
 
-    </div>
 
-    <!-- JavaScript External File -->
-    <script src="app.js"></script>
+            <div class="field">
+
+                <label>
+                    ค่าลดหย่อนรวม
+                </label>
+
+                <input
+                    type="number"
+                    id="taxDeduct"
+                    value="60000"
+                    inputmode="numeric"
+                >
+
+            </div>
+
+
+            <button
+                class="btn"
+                id="taxCalcBtn"
+            >
+                🧮 คำนวณภาษี
+            </button>
+
+
+            <div
+                id="taxResult"
+                class="empty"
+                style="margin-top:16px;"
+            ></div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ==========================================
+         7. ACTIVITY LOG
+    =========================================== -->
+    <section
+        class="page"
+        id="activitylog"
+    >
+
+        <div
+            style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"
+        >
+
+            <h3 style="margin:0;">
+                ประวัติการใช้งาน
+            </h3>
+
+            <button
+                class="btn-sm"
+                id="exportLogsBtn"
+            >
+                📥 ส่งออก ประวัติ CSV
+            </button>
+
+        </div>
+
+
+        <div
+            id="logList"
+            class="tx-day"
+        ></div>
+
+    </section>
+
+
+    <!-- ==========================================
+         8. SYSTEM TEST
+    =========================================== -->
+    <section
+        class="page"
+        id="test"
+    >
+
+        <div class="card">
+
+            <h3>
+                🛠️ ศูนย์ทดสอบและวินิจฉัยระบบ
+            </h3>
+
+            <p
+                style="font-size:13px;color:var(--muted);margin-bottom:16px;"
+            >
+                ทดสอบ LocalStorage, Canvas, OCR และระบบแจ้งเตือน
+            </p>
+
+
+            <button
+                class="btn"
+                id="runTestBtn"
+                style="background:#333;"
+            >
+                🔍 เริ่มทดสอบระบบทั้งหมด
+            </button>
+
+
+            <div
+                id="testResultsList"
+                style="margin-top:16px;"
+            ></div>
+
+        </div>
+
+    </section>
+
+</div>
+
+
+<script src="app.js"></script>
+
 </body>
 </html>
