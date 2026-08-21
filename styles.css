@@ -620,6 +620,19 @@ body {
     margin-bottom: 6px;
 }
 
+.opt-tag {
+    font-weight: 400;
+    color: var(--ink-faint);
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.form-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
 input[type="text"],
 input[type="number"],
 input[type="date"],
@@ -942,6 +955,69 @@ input:focus, select:focus {
 }
 
 /* ---------------------------------------------------------
+   Search & filter bar
+--------------------------------------------------------- */
+.search-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+
+.search-input-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    align-items: center;
+}
+
+.search-input-wrap input[type="text"] {
+    padding-left: 34px;
+    padding-right: 34px;
+}
+
+.search-icon {
+    position: absolute;
+    left: 12px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    pointer-events: none;
+}
+
+.search-clear {
+    position: absolute;
+    right: 6px;
+    border: none;
+    background: none;
+    color: var(--ink-faint);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.search-clear:hover {
+    color: var(--red);
+}
+
+#txCategoryFilter {
+    width: auto;
+    max-width: 168px;
+    flex-shrink: 0;
+    font-size: 12.5px;
+    padding: 12px 10px;
+}
+
+.search-hint {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin: 8px 2px 12px;
+}
+
+/* ---------------------------------------------------------
    Transactions list
 --------------------------------------------------------- */
 .tx-group {
@@ -968,6 +1044,13 @@ input:focus, select:focus {
     justify-content: space-between;
     margin-bottom: 8px;
     gap: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tx-card:hover {
+    border-color: var(--pine);
+    box-shadow: var(--shadow-sm);
 }
 
 .tx-icon {
@@ -1247,6 +1330,112 @@ input:focus, select:focus {
     color: var(--red);
 }
 
+/* ---------------------------------------------------------
+   Transaction detail / edit modal
+--------------------------------------------------------- */
+body.modal-open {
+    overflow: hidden;
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 60, 47, 0.45);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    padding: 0;
+}
+
+.modal-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal {
+    background: var(--paper-raised);
+    width: 100%;
+    max-width: 480px;
+    max-height: 88vh;
+    overflow-y: auto;
+    border-radius: 20px 20px 0 0;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    transform: translateY(16px);
+    transition: transform 0.25s ease;
+    -webkit-overflow-scrolling: touch;
+}
+
+.modal-overlay.show .modal {
+    transform: translateY(0);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.modal-header h3 {
+    font-family: var(--font-display);
+    color: var(--pine-dark);
+    font-size: 16px;
+    margin: 0;
+}
+
+.modal-close {
+    border: none;
+    background: var(--paper);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--ink-soft);
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.modal-close:hover {
+    color: var(--red);
+}
+
+.modal-meta {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-faint);
+    margin-top: 10px;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.modal-actions .btn {
+    flex: 1;
+}
+
+.modal-actions .btn.danger-outline {
+    flex: 0 0 auto;
+}
+
+@media (min-width: 640px) {
+    .modal-overlay {
+        align-items: center;
+        padding: 20px;
+    }
+    .modal {
+        border-radius: var(--radius-lg);
+        max-height: 85vh;
+    }
+}
+
 /* SweetAlert2 tuning to match the ledger tone */
 .swal2-popup {
     font-family: var(--font-body) !important;
@@ -1265,4 +1454,101 @@ input:focus, select:focus {
 
 .swal2-cancel {
     border-radius: 10px !important;
+}
+
+/* ---------------------------------------------------------
+   Responsive layout — fit every screen size
+--------------------------------------------------------- */
+
+/* Very small phones: keep paired fields from feeling cramped */
+@media (max-width: 360px) {
+    .wrap {
+        padding: 14px 12px 40px;
+    }
+    .form-pair {
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+    .cat-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Tablets */
+@media (min-width: 640px) {
+    .wrap {
+        max-width: 640px;
+        padding: 24px 24px 56px;
+    }
+    .cat-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+    .result-fields {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* Small laptops / desktop */
+@media (min-width: 900px) {
+    .wrap {
+        max-width: 1080px;
+        padding: 32px 32px 64px;
+    }
+
+    .top h1 {
+        font-size: 26px;
+    }
+
+    .tabs button {
+        font-size: 13.5px;
+        padding: 12px 6px;
+    }
+
+    .cat-grid {
+        grid-template-columns: repeat(6, 1fr);
+    }
+
+    .result-fields {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    /* Dashboard: passbook + donut side by side, chart spans full width */
+    #dashboard {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        align-items: start;
+    }
+    #dashboard > .monthbar,
+    #dashboard > #incomeExpenseChartCard {
+        grid-column: 1 / -1;
+    }
+    #dashboard > .passbook,
+    #dashboard > .card {
+        margin-bottom: 0;
+    }
+
+    /* Transactions: masonry-style two columns of date groups */
+    #txList {
+        column-count: 2;
+        column-gap: 16px;
+    }
+    #txList .tx-group {
+        break-inside: avoid;
+        -webkit-column-break-inside: avoid;
+    }
+
+    .search-bar {
+        margin-bottom: 8px;
+    }
+}
+
+/* Wide desktop */
+@media (min-width: 1280px) {
+    .wrap {
+        max-width: 1280px;
+    }
+    #txList {
+        column-count: 3;
+    }
 }

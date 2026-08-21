@@ -33,6 +33,9 @@ let selectedCategory = 'food';
 let currentScannedImageBase64 = null;
 let multiSlipItems = []; // { id, file, base64, status, parsed, error }
 let chartMode = 'daily';
+let txSearchQuery = '';
+let txCategoryFilter = '';
+let activeTxId = null;
 
 // ============================================================
 // 2. INITIALIZATION
@@ -163,6 +166,8 @@ function initUI() {
     initSlipScanner();
     initMultiScanActions();
     initChartToggle();
+    initTxSearch();
+    initTxModal();
 
     window.addEventListener('resize', () => {
         clearTimeout(window.__financeResizeTimer);
@@ -188,9 +193,11 @@ function renderCategoryPickers() {
         });
     }
     const resCat = document.getElementById('resCategory');
-    if (resCat) {
-        resCat.innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${c.icon} ${escapeHtml(c.label)}</option>`).join('');
-    }
+    if (resCat) resCat.innerHTML = buildCategoryOptions();
+}
+
+function buildCategoryOptions(selected) {
+    return CATEGORIES.map(c => `<option value="${c.id}" ${c.id === selected ? 'selected' : ''}>${c.icon} ${escapeHtml(c.label)}</option>`).join('');
 }
 
 // ============================================================
@@ -504,8 +511,11 @@ function initManualForm() {
     form.addEventListener('submit', async event => {
         event.preventDefault();
         const date = document.getElementById('fDate')?.value || todayStr();
+        const time = document.getElementById('fTime')?.value || '';
         const amount = parseFloat(document.getElementById('fAmount')?.value || 0);
         const type = document.querySelector('input[name="type"]:checked')?.value || 'cash';
+        const sender = document.getElementById('fSender')?.value.trim() || '';
+        const receiver = document.getElementById('fReceiver')?.value.trim() || '';
         const note = document.getElementById('fNote')?.value.trim() || '';
 
         if (!amount || amount <= 0) {
@@ -516,16 +526,20 @@ function initManualForm() {
         const category = CATEGORY_MAP[selectedCategory];
         const tx = {
             id: Date.now(),
-            date, amount, category: selectedCategory, type, note,
-            sender: '', receiver: ''
+            date, time, amount, category: selectedCategory, type, note,
+            sender, receiver
         };
         state.transactions.push(tx);
         save();
         addLog('add_transaction', {
-            date, amount: `฿${formatMoney(amount)}`, category: category?.label || selectedCategory, note
+            date, amount: `฿${formatMoney(amount)}`, category: category?.label || selectedCategory,
+            people: sender || receiver ? `${sender || '?'} → ${receiver || '?'}` : '', note
         });
 
         document.getElementById('fAmount').value = '';
+        document.getElementById('fTime').value = '';
+        document.getElementById('fSender').value = '';
+        document.getElementById('fReceiver').value = '';
         document.getElementById('fNote').value = '';
         renderAll();
         await notifySuccess('บันทึกรายการเรียบร้อย', `฿${formatMoney(amount)}`);
@@ -533,18 +547,88 @@ function initManualForm() {
 }
 
 // ============================================================
-// 15. TRANSACTIONS LIST
+// 15. TRANSACTIONS LIST — search, filter, grouping
 // ============================================================
+function initTxSearch() {
+    const input = document.getElementById('txSearchInput');
+    const clearBtn = document.getElementById('txSearchClear');
+    const catFilter = document.getElementById('txCategoryFilter');
+
+    if (catFilter) {
+        catFilter.innerHTML = `<option value="">ทุกหมวดหมู่</option>` + buildCategoryOptions();
+    }
+
+    input?.addEventListener('input', () => {
+        txSearchQuery = input.value;
+        if (clearBtn) clearBtn.style.display = txSearchQuery ? 'flex' : 'none';
+        renderTransactions();
+    });
+
+    clearBtn?.addEventListener('click', () => {
+        if (input) input.value = '';
+        txSearchQuery = '';
+        clearBtn.style.display = 'none';
+        renderTransactions();
+        input?.focus();
+    });
+
+    catFilter?.addEventListener('change', () => {
+        txCategoryFilter = catFilter.value;
+        renderTransactions();
+    });
+}
+
+function matchesTxSearch(tx, query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    const category = CATEGORY_MAP[tx.category] || CATEGORY_MAP.other;
+    const typeLabel = tx.type === 'cash' ? 'เงินสด' : 'โอน/บัตร';
+    const haystack = [
+        tx.note, tx.sender, tx.receiver, category.label, category.id,
+        tx.date, formatThaiDate(tx.date), tx.time, typeLabel,
+        formatMoney(tx.amount), String(tx.amount)
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(q);
+}
+
+function getFilteredTransactions() {
+    const query = txSearchQuery.trim();
+    const searching = query.length > 0;
+
+    let list = searching
+        ? state.transactions.slice()
+        : state.transactions.filter(tx => String(tx.date || '').startsWith(state.currentMonth));
+
+    if (txCategoryFilter) list = list.filter(tx => tx.category === txCategoryFilter);
+    if (searching) list = list.filter(tx => matchesTxSearch(tx, query));
+
+    list.sort((a, b) => (String(b.date || '') + String(b.time || '')).localeCompare(String(a.date || '') + String(a.time || '')) || Number(b.id) - Number(a.id));
+    return { list, searching };
+}
+
 function renderTransactions() {
     const list = document.getElementById('txList');
+    const hint = document.getElementById('txSearchHint');
     if (!list) return;
 
-    const transactions = state.transactions
-        .filter(tx => String(tx.date || '').startsWith(state.currentMonth))
-        .sort((a, b) => (String(b.date || '') + String(b.time || '')).localeCompare(String(a.date || '') + String(a.time || '')) || Number(b.id) - Number(a.id));
+    const { list: transactions, searching } = getFilteredTransactions();
+
+    if (hint) {
+        if (searching) {
+            hint.style.display = 'block';
+            hint.textContent = transactions.length
+                ? `พบ ${transactions.length} รายการ · ค้นหาทุกเดือน`
+                : `ไม่พบรายการที่ตรงกับ "${txSearchQuery.trim()}"`;
+        } else {
+            hint.style.display = 'none';
+            hint.textContent = '';
+        }
+    }
 
     if (!transactions.length) {
-        list.innerHTML = `<div class="empty-state"><span class="icon">📖</span>ยังไม่มีรายการในเดือนนี้</div>`;
+        list.innerHTML = searching
+            ? `<div class="empty-state"><span class="icon">🔎</span>ไม่พบรายการที่ตรงกับการค้นหา</div>`
+            : `<div class="empty-state"><span class="icon">📖</span>ยังไม่มีรายการในเดือนนี้</div>`;
         return;
     }
 
@@ -562,7 +646,7 @@ function renderTransactions() {
                 ? `<div class="tx-people">${tx.sender ? `ผู้โอน: ${escapeHtml(tx.sender)}` : ''}${tx.sender && tx.receiver ? ' → ' : ''}${tx.receiver ? `ผู้รับ: ${escapeHtml(tx.receiver)}` : ''}</div>`
                 : '';
             html += `
-                <div class="tx-card" data-id="${tx.id}">
+                <div class="tx-card" data-id="${tx.id}" onclick="openTxDetail(${Number(tx.id)})">
                     <div class="tx-icon">${category.icon}</div>
                     <div class="tx-info">
                         <div class="tx-title">${escapeHtml(tx.note || category.label)}</div>
@@ -571,7 +655,7 @@ function renderTransactions() {
                     </div>
                     <div class="tx-amount-col">
                         <div class="tx-amount">-฿${formatMoney(tx.amount)}</div>
-                        <button class="tx-delete" onclick="deleteTx(${Number(tx.id)})">ลบ</button>
+                        <button class="tx-delete" onclick="event.stopPropagation(); deleteTx(${Number(tx.id)})">ลบ</button>
                     </div>
                 </div>
             `;
@@ -579,6 +663,96 @@ function renderTransactions() {
         html += `</div>`;
     });
     list.innerHTML = html;
+}
+
+// ============================================================
+// 15b. TRANSACTION DETAIL / EDIT MODAL
+// ============================================================
+function initTxModal() {
+    const overlay = document.getElementById('txModalOverlay');
+    const txmCat = document.getElementById('txmCategory');
+    if (txmCat) txmCat.innerHTML = buildCategoryOptions();
+
+    document.getElementById('txModalCloseBtn')?.addEventListener('click', closeTxModal);
+    document.getElementById('txmSaveBtn')?.addEventListener('click', saveTxDetail);
+    document.getElementById('txmDeleteBtn')?.addEventListener('click', deleteTxFromModal);
+    overlay?.addEventListener('click', event => {
+        if (event.target === overlay) closeTxModal();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') closeTxModal();
+    });
+}
+
+function openTxDetail(id) {
+    const tx = state.transactions.find(t => Number(t.id) === Number(id));
+    if (!tx) return;
+    activeTxId = tx.id;
+
+    const setVal = (elId, value) => { const el = document.getElementById(elId); if (el) el.value = value; };
+    setVal('txmDate', tx.date || '');
+    setVal('txmTime', tx.time || '');
+    setVal('txmAmount', tx.amount ?? '');
+    setVal('txmCategory', tx.category || 'other');
+    setVal('txmSender', tx.sender || '');
+    setVal('txmReceiver', tx.receiver || '');
+    setVal('txmNote', tx.note || '');
+    document.querySelectorAll('input[name="txmType"]').forEach(radio => {
+        radio.checked = radio.value === (tx.type || 'cash');
+    });
+
+    const meta = document.getElementById('txModalMeta');
+    if (meta) meta.textContent = `รหัสรายการ #${tx.id}`;
+
+    document.getElementById('txModalOverlay')?.classList.add('show');
+    document.body.classList.add('modal-open');
+}
+
+function closeTxModal() {
+    document.getElementById('txModalOverlay')?.classList.remove('show');
+    document.body.classList.remove('modal-open');
+    activeTxId = null;
+}
+
+async function saveTxDetail() {
+    if (activeTxId == null) return;
+    const tx = state.transactions.find(t => Number(t.id) === Number(activeTxId));
+    if (!tx) return;
+
+    const date = document.getElementById('txmDate')?.value || tx.date;
+    const time = document.getElementById('txmTime')?.value || '';
+    const amount = parseFloat(document.getElementById('txmAmount')?.value || 0);
+    const category = document.getElementById('txmCategory')?.value || 'other';
+    const type = document.querySelector('input[name="txmType"]:checked')?.value || 'cash';
+    const sender = document.getElementById('txmSender')?.value.trim() || '';
+    const receiver = document.getElementById('txmReceiver')?.value.trim() || '';
+    const note = document.getElementById('txmNote')?.value.trim() || '';
+
+    if (!date) {
+        await notifyWarning('ยังไม่ได้ระบุวันที่', 'กรุณาเลือกวันที่ของรายการ');
+        return;
+    }
+    if (!amount || amount <= 0) {
+        await notifyWarning('จำนวนเงินไม่ถูกต้อง', 'กรุณาระบุจำนวนเงินมากกว่า 0');
+        return;
+    }
+
+    Object.assign(tx, { date, time, amount, category, type, sender, receiver, note });
+    save();
+    addLog('edit_transaction', {
+        date, amount: `฿${formatMoney(amount)}`,
+        people: sender || receiver ? `${sender || '?'} → ${receiver || '?'}` : '', note
+    });
+    closeTxModal();
+    renderAll();
+    toast('บันทึกการแก้ไขเรียบร้อย');
+}
+
+async function deleteTxFromModal() {
+    if (activeTxId == null) return;
+    const id = activeTxId;
+    closeTxModal();
+    await deleteTx(id);
 }
 
 async function deleteTx(id) {
@@ -684,6 +858,7 @@ function calculateTax() {
 // ============================================================
 const LOG_LABELS = {
     add_transaction: 'เพิ่มรายการ',
+    edit_transaction: 'แก้ไขรายการ',
     delete_transaction: 'ลบรายการ',
     update_income: 'อัปเดตรายรับ',
     scan_receipt: 'บันทึกจากสลิป',

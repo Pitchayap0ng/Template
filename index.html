@@ -225,9 +225,15 @@
 
             <form class="entry" id="entryForm">
 
-                <div class="field">
-                    <label>วันที่</label>
-                    <input type="date" id="fDate" required>
+                <div class="form-pair">
+                    <div class="field">
+                        <label>วันที่</label>
+                        <input type="date" id="fDate" required>
+                    </div>
+                    <div class="field">
+                        <label>เวลา <span class="opt-tag">(ถ้ามี)</span></label>
+                        <input type="time" id="fTime">
+                    </div>
                 </div>
 
                 <div class="field">
@@ -251,6 +257,17 @@
                             <input type="radio" name="type" value="transfer">
                             <span>โอน/บัตร</span>
                         </label>
+                    </div>
+                </div>
+
+                <div class="form-pair">
+                    <div class="field">
+                        <label>ผู้โอน <span class="opt-tag">(ถ้ามี)</span></label>
+                        <input type="text" id="fSender" placeholder="ชื่อผู้โอน">
+                    </div>
+                    <div class="field">
+                        <label>ผู้รับ <span class="opt-tag">(ถ้ามี)</span></label>
+                        <input type="text" id="fReceiver" placeholder="ชื่อผู้รับ">
                     </div>
                 </div>
 
@@ -279,9 +296,83 @@
             <button class="btn-sm" id="exportCsv">ส่งออก CSV</button>
         </div>
 
+        <div class="search-bar">
+            <div class="search-input-wrap">
+                <span class="search-icon">🔎</span>
+                <input type="text" id="txSearchInput" placeholder="ค้นหาชื่อ วันที่ เวลา จำนวนเงิน หมวดหมู่ โน้ต...">
+                <button type="button" class="search-clear" id="txSearchClear" style="display:none;" aria-label="ล้างคำค้นหา">✕</button>
+            </div>
+            <select id="txCategoryFilter" aria-label="กรองตามหมวดหมู่"></select>
+        </div>
+        <div class="search-hint" id="txSearchHint" style="display:none;"></div>
+
         <div id="txList"></div>
 
     </section>
+
+    <!-- ==========================================
+         TRANSACTION DETAIL / EDIT MODAL
+    =========================================== -->
+    <div class="modal-overlay" id="txModalOverlay">
+        <div class="modal" id="txModal" role="dialog" aria-modal="true" aria-labelledby="txModalTitle">
+            <div class="modal-header">
+                <h3 id="txModalTitle">รายละเอียดรายการ</h3>
+                <button type="button" class="modal-close" id="txModalCloseBtn" aria-label="ปิด">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="result-fields">
+                    <div class="field">
+                        <label>วันที่</label>
+                        <input type="date" id="txmDate">
+                    </div>
+                    <div class="field">
+                        <label>เวลา</label>
+                        <input type="time" id="txmTime">
+                    </div>
+                    <div class="field">
+                        <label>จำนวนเงิน</label>
+                        <input type="number" id="txmAmount" step="0.01" min="0" inputmode="decimal">
+                    </div>
+                    <div class="field">
+                        <label>หมวดหมู่</label>
+                        <select id="txmCategory"></select>
+                    </div>
+                    <div class="field" style="grid-column:1 / -1;">
+                        <label>ประเภทการจ่าย</label>
+                        <div class="type-row">
+                            <label>
+                                <input type="radio" name="txmType" value="cash">
+                                <span>เงินสด</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="txmType" value="transfer">
+                                <span>โอน/บัตร</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label>ผู้โอน</label>
+                        <input type="text" id="txmSender" placeholder="ถ้ามี">
+                    </div>
+                    <div class="field">
+                        <label>ผู้รับ</label>
+                        <input type="text" id="txmReceiver" placeholder="ถ้ามี">
+                    </div>
+                    <div class="field" style="grid-column:1 / -1;">
+                        <label>รายละเอียด / โน้ต</label>
+                        <input type="text" id="txmNote">
+                    </div>
+                </div>
+                <div class="modal-meta" id="txModalMeta"></div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn" type="button" id="txmSaveBtn">บันทึกการแก้ไข</button>
+                <button class="btn danger-outline" type="button" id="txmDeleteBtn">ลบรายการ</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ==========================================
          5. ANALYSIS
