@@ -865,7 +865,8 @@ const LOG_LABELS = {
     tax_calculation: 'คำนวณภาษี',
     system_test: 'ทดสอบระบบ',
     export_csv: 'ส่งออก CSV',
-    export_logs: 'ส่งออกประวัติ'
+    export_logs: 'ส่งออกประวัติ',
+    clear_logs: 'ล้างประวัติกิจกรรม'
 };
 
 function addLog(action, details = {}) {
@@ -943,6 +944,7 @@ function runSystemDiagnostics() {
 function initExportButtons() {
     document.getElementById('exportCsv')?.addEventListener('click', exportTransactionsCSV);
     document.getElementById('exportLogsBtn')?.addEventListener('click', exportLogsCSV);
+    document.getElementById('clearLogsBtn')?.addEventListener('click', clearActivityLogWithCode);
 }
 
 function downloadCSV(content, filename) {
@@ -976,12 +978,63 @@ function exportLogsCSV() {
         notifyInfo('ไม่มีข้อมูล', 'ไม่มีประวัติกิจกรรม');
         return;
     }
-    let csv = '\uFEFFTimestamp,Action,Details\n';
+    let csv = '\uFEFFวันที่,เวลา,การกระทำ,รายละเอียด\n';
     state.logs.forEach(log => {
-        csv += `"${csvEscape(log.timestamp)}","${csvEscape(log.action)}","${csvEscape(JSON.stringify(log.details || {}))}"\n`;
+        const time = new Date(log.timestamp);
+        const validTime = !Number.isNaN(time.getTime());
+        const dateStr = validTime ? time.toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '';
+        const timeStr = validTime ? time.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+        const actionLabel = LOG_LABELS[log.action] || log.action;
+        const detail = Object.values(log.details || {}).filter(Boolean).join(' | ');
+        csv += `"${csvEscape(dateStr)}","${csvEscape(timeStr)}","${csvEscape(actionLabel)}","${csvEscape(detail)}"\n`;
     });
-    downloadCSV(csv, 'activity_logs.csv');
+    downloadCSV(csv, `activity_logs_${todayStr()}.csv`);
+    addLog('export_logs', { count: `${state.logs.length} รายการ` });
     notifySuccess('ส่งออกประวัติเรียบร้อย');
+}
+
+const ACTIVITY_LOG_CLEAR_CODE = '160245';
+
+async function clearActivityLogWithCode() {
+    if (!state.logs.length) {
+        await notifyInfo('ไม่มีข้อมูล', 'ยังไม่มีประวัติกิจกรรมให้ลบ');
+        return;
+    }
+
+    const { value: code, isConfirmed: codeEntered } = await Swal.fire({
+        icon: 'warning',
+        title: 'ยืนยันตัวตนก่อนลบ',
+        text: 'กรุณากรอกรหัสยืนยันเพื่อดำเนินการลบประวัติกิจกรรมทั้งหมด',
+        input: 'text',
+        inputAttributes: { inputmode: 'numeric', autocomplete: 'off', maxlength: '10' },
+        inputPlaceholder: 'กรอกรหัสยืนยัน',
+        showCancelButton: true,
+        confirmButtonText: 'ถัดไป',
+        cancelButtonText: 'ยกเลิก',
+        reverseButtons: true,
+        focusCancel: true,
+        inputValidator: value => {
+            if (!value) return 'กรุณากรอกรหัสยืนยัน';
+        }
+    });
+    if (!codeEntered) return;
+
+    if (String(code).trim() !== ACTIVITY_LOG_CLEAR_CODE) {
+        await notifyError('รหัสไม่ถูกต้อง', 'ไม่สามารถลบประวัติกิจกรรมได้');
+        return;
+    }
+
+    const confirmed = await confirmAction(
+        'ยืนยันการลบประวัติกิจกรรมทั้งหมด?',
+        `จะลบประวัติทั้งหมด ${state.logs.length} รายการ การลบไม่สามารถย้อนกลับได้`,
+        'ลบประวัติทั้งหมด'
+    );
+    if (!confirmed) return;
+
+    state.logs = [];
+    addLog('clear_logs', { note: 'ลบประวัติกิจกรรมทั้งหมดด้วยรหัสยืนยัน' });
+    renderLogs();
+    await notifySuccess('ลบประวัติกิจกรรมเรียบร้อย');
 }
 
 // ============================================================

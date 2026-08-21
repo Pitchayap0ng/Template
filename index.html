@@ -428,9 +428,12 @@
     =========================================== -->
     <section class="page" id="activitylog">
 
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
             <h3 style="margin:0;font-family:var(--font-display);color:var(--pine-dark);">ประวัติการใช้งาน</h3>
-            <button class="btn-sm" id="exportLogsBtn">ส่งออก CSV</button>
+            <div style="display:flex;gap:8px;">
+                <button class="btn-sm" id="exportLogsBtn">ส่งออก CSV</button>
+                <button class="btn-sm danger" id="clearLogsBtn">ล้างประวัติ</button>
+            </div>
         </div>
 
         <div id="logList"></div>

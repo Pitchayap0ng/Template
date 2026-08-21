@@ -771,6 +771,15 @@ input:focus, select:focus {
     background: #D7E5DB;
 }
 
+.btn-sm.danger {
+    background: var(--red-soft);
+    color: var(--red);
+}
+
+.btn-sm.danger:hover {
+    background: #ECC9C0;
+}
+
 /* ---------------------------------------------------------
    Slip scanner
 --------------------------------------------------------- */
