@@ -1,71 +1,27 @@
 // ============================================================
-// FINANCE MANAGER - FULL APP.JS
+// FINANCE MANAGER — app.js
+// Passbook-style personal finance tracker: dashboard, manual
+// entries, bank-slip OCR (single + batch), CSV export, activity
+// log, 50/30/20 analysis, tax estimate, diagnostics.
 // ============================================================
-// Features
-// - LocalStorage
-// - Dashboard
-// - Income / Expense
-// - Category donut
-// - Daily / Monthly chart
-// - Manual transaction
-// - SweetAlert2 notifications
-// - SweetAlert2 confirmations
-// - Single slip OCR
-// - Multi slip OCR
-// - KBank OCR enhancement
-// - Amount extraction enhancement
-// - Date / Time / Sender / Receiver extraction
-// - CSV export
-// - Activity logs
-// - 50/30/20 analysis
-// - Tax calculator
-// - Diagnostics
-// ============================================================
-
 
 // ============================================================
 // 1. CONSTANTS
 // ============================================================
-
 const CATEGORIES = [
-    {
-        id: 'food',
-        label: 'อาหาร/เครื่องดื่ม',
-        icon: '🍲',
-        color: '#FF7043'
-    },
-    {
-        id: 'transport',
-        label: 'เดินทาง/น้ำมัน',
-        icon: '🚗',
-        color: '#42A5F5'
-    },
-    {
-        id: 'shopping',
-        label: 'ชอปปิง',
-        icon: '🛍️',
-        color: '#AB47BC'
-    },
-    {
-        id: 'bills',
-        label: 'บิล/ค่าน้ำค่าไฟ',
-        icon: '⚡',
-        color: '#FFA726'
-    },
-    {
-        id: 'entertainment',
-        label: 'บันเทิง',
-        icon: '🎬',
-        color: '#26A69A'
-    },
-    {
-        id: 'other',
-        label: 'อื่นๆ',
-        icon: '📦',
-        color: '#78909C'
-    }
+    { id: 'food', label: 'อาหาร/เครื่องดื่ม', icon: '🍲', color: '#1E5B47' },
+    { id: 'transport', label: 'เดินทาง/น้ำมัน', icon: '🚗', color: '#3F7D66' },
+    { id: 'shopping', label: 'ชอปปิง', icon: '🛍️', color: '#A9772E' },
+    { id: 'bills', label: 'บิล/ค่าน้ำค่าไฟ', icon: '⚡', color: '#C79A4B' },
+    { id: 'entertainment', label: 'บันเทิง', icon: '🎬', color: '#7A8B6F' },
+    { id: 'other', label: 'อื่นๆ', icon: '📦', color: '#B9AF9C' }
 ];
-
+const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
+const STORAGE_KEY = 'finance_app_data';
+const THAI_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+const THAI_MONTHS_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+    'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 
 let state = {
     currentMonth: new Date().toISOString().slice(0, 7),
@@ -73,6051 +29,1378 @@ let state = {
     transactions: [],
     logs: []
 };
-
-
 let selectedCategory = 'food';
-
-let manualReceiptBase64 = null;
-
 let currentScannedImageBase64 = null;
-
-let multiSlipResults = [];
-
-let multiSlipWorker = null;
-
-let incomeExpenseChart = null;
-
+let multiSlipItems = []; // { id, file, base64, status, parsed, error }
 let chartMode = 'daily';
-
 
 // ============================================================
 // 2. INITIALIZATION
 // ============================================================
-
 document.addEventListener('DOMContentLoaded', () => {
-
     loadData();
-
     normalizeState();
-
     initUI();
-
+    initNetStatus();
     renderAll();
-
-    initEnhancements();
-
 });
 
-
 // ============================================================
-// 3. LOCAL STORAGE
+// 3. STORAGE
 // ============================================================
-
 function normalizeState() {
-
     if (!state || typeof state !== 'object') {
-
-        state = {
-            currentMonth: new Date().toISOString().slice(0, 7),
-            income: {},
-            transactions: [],
-            logs: []
-        };
-
+        state = { currentMonth: new Date().toISOString().slice(0, 7), income: {}, transactions: [], logs: [] };
     }
-
-    if (!state.income) {
-        state.income = {};
-    }
-
-    if (!Array.isArray(state.transactions)) {
-        state.transactions = [];
-    }
-
-    if (!Array.isArray(state.logs)) {
-        state.logs = [];
-    }
-
+    if (!state.currentMonth) state.currentMonth = new Date().toISOString().slice(0, 7);
+    if (!state.income || typeof state.income !== 'object') state.income = {};
+    if (!Array.isArray(state.transactions)) state.transactions = [];
+    if (!Array.isArray(state.logs)) state.logs = [];
 }
-
 
 function loadData() {
-
-    const saved = localStorage.getItem(
-        'finance_app_data'
-    );
-
-    if (!saved) {
-        return;
-    }
-
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) return;
     try {
-
         state = JSON.parse(saved);
-
     } catch (error) {
-
-        console.error(
-            'Data parsing error:',
-            error
-        );
-
-        Swal.fire({
-            icon: 'error',
-            title: 'โหลดข้อมูลไม่สำเร็จ',
-            text: 'ข้อมูลเดิมอาจเสียหาย ระบบจะเริ่มต้นข้อมูลใหม่'
-        });
-
+        console.error('Data parsing error:', error);
+        notifyError('โหลดข้อมูลไม่สำเร็จ', 'ข้อมูลเดิมอาจเสียหาย ระบบจะเริ่มต้นข้อมูลใหม่');
     }
-
 }
-
 
 function save() {
-
     try {
-
-        localStorage.setItem(
-            'finance_app_data',
-            JSON.stringify(state)
-        );
-
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (error) {
-
-        console.error(
-            'LocalStorage error:',
-            error
-        );
-
-        Swal.fire({
-            icon: 'error',
-            title: 'บันทึกข้อมูลไม่สำเร็จ',
-            text: 'พื้นที่จัดเก็บข้อมูลของเบราว์เซอร์อาจเต็ม'
-        });
-
+        console.error('LocalStorage error:', error);
+        notifyError('บันทึกข้อมูลไม่สำเร็จ', 'พื้นที่จัดเก็บข้อมูลของเบราว์เซอร์อาจเต็ม');
     }
-
 }
 
-
 // ============================================================
-// 4. DATE / NUMBER HELPERS
+// 4. HELPERS — date, money, text
 // ============================================================
-
 function todayStr() {
-
     const now = new Date();
-
-    const year = now.getFullYear();
-
-    const month = String(
-        now.getMonth() + 1
-    ).padStart(2, '0');
-
-    const day = String(
-        now.getDate()
-    ).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
-
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
-
 
 function formatMoney(value) {
-
-    return Number(value || 0)
-        .toLocaleString(
-            'th-TH',
-            {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            }
-        );
-
+    return Number(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[ch]));
+}
+
+function csvEscape(value) {
+    return String(value ?? '').replace(/"/g, '""');
+}
+
+function formatThaiDate(dateStr) {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (!y || !m || !d) return dateStr;
+    return `${d} ${THAI_MONTHS_SHORT[m - 1]} ${y + 543}`;
+}
 
 function normalizeThaiDigits(text) {
-
     if (!text) return '';
-
-    const thaiDigits = {
-        '๐': '0',
-        '๑': '1',
-        '๒': '2',
-        '๓': '3',
-        '๔': '4',
-        '๕': '5',
-        '๖': '6',
-        '๗': '7',
-        '๘': '8',
-        '๙': '9'
-    };
-
-    return String(text).replace(
-        /[๐-๙]/g,
-        d => thaiDigits[d]
-    );
-
+    const thaiDigits = '๐๑๒๓๔๕๖๗๘๙';
+    return String(text).replace(/[๐-๙]/g, d => String(thaiDigits.indexOf(d)));
 }
-
 
 function normalizeOCRText(text) {
-
-    let result = normalizeThaiDigits(
-        text || ''
-    );
-
-    result = result
-        .replace(/\u00A0/g, ' ')
-        .replace(/[‐-‒–—]/g, '-')
-        .replace(/[|]/g, 'I');
-
+    let result = normalizeThaiDigits(text || '');
+    result = result.replace(/\u00A0/g, ' ').replace(/[‐-‒–—]/g, '-').replace(/[|]/g, 'I');
     return result;
-
 }
-
 
 // ============================================================
-// 5. SWEETALERT2
+// 5. NOTIFICATIONS (SweetAlert2 wrappers)
 // ============================================================
-
-function swalDefault() {
-
-    return {
-        confirmButtonText: 'ตกลง',
-        cancelButtonText: 'ยกเลิก'
-    };
-
+function notifySuccess(title, text = '') {
+    return Swal.fire({ icon: 'success', title, text, timer: 1800, showConfirmButton: false, timerProgressBar: true });
 }
-
-
-function notifySuccess(
-    title,
-    text = ''
-) {
-
-    return Swal.fire({
-        icon: 'success',
-        title,
-        text,
-        timer: 1800,
-        showConfirmButton: false,
-        timerProgressBar: true
-    });
-
+function notifyInfo(title, text = '') {
+    return Swal.fire({ icon: 'info', title, text, confirmButtonText: 'ตกลง' });
 }
-
-
-function notifyInfo(
-    title,
-    text = ''
-) {
-
-    return Swal.fire({
-        icon: 'info',
-        title,
-        text,
-        ...swalDefault()
-    });
-
+function notifyWarning(title, text = '') {
+    return Swal.fire({ icon: 'warning', title, text, confirmButtonText: 'ตกลง' });
 }
-
-
-function notifyWarning(
-    title,
-    text = ''
-) {
-
-    return Swal.fire({
-        icon: 'warning',
-        title,
-        text,
-        ...swalDefault()
-    });
-
+function notifyError(title, text = '') {
+    return Swal.fire({ icon: 'error', title, text, confirmButtonText: 'ตกลง' });
 }
-
-
-function notifyError(
-    title,
-    text = ''
-) {
-
-    return Swal.fire({
-        icon: 'error',
-        title,
-        text,
-        ...swalDefault()
-    });
-
-}
-
-
-async function confirmAction(
-    title,
-    text,
-    confirmText = 'ยืนยัน'
-) {
-
+async function confirmAction(title, text, confirmText = 'ยืนยัน') {
     const result = await Swal.fire({
-
-        icon: 'question',
-
-        title,
-
-        text,
-
-        showCancelButton: true,
-
-        confirmButtonText: confirmText,
-
-        cancelButtonText: 'ยกเลิก',
-
-        reverseButtons: true,
-
-        focusCancel: true
-
+        icon: 'question', title, text, showCancelButton: true,
+        confirmButtonText: confirmText, cancelButtonText: 'ยกเลิก',
+        reverseButtons: true, focusCancel: true
     });
-
     return result.isConfirmed;
-
 }
-
-
-// เดิมมี showNotification()
-// คงชื่อเดิมไว้เพื่อไม่ให้ฟังก์ชันเก่าพัง
-function showNotification(
-    title,
-    icon = 'success'
-) {
-
-    return Swal.fire({
-
-        toast: true,
-
-        position: 'top-end',
-
-        icon,
-
-        title,
-
-        showConfirmButton: false,
-
-        timer: 2200,
-
-        timerProgressBar: true
-
-    });
-
+function toast(title, icon = 'success') {
+    return Swal.fire({ toast: true, position: 'top-end', icon, title, showConfirmButton: false, timer: 2000, timerProgressBar: true });
 }
-
 
 // ============================================================
 // 6. UI INIT
 // ============================================================
-
 function initUI() {
+    const fDate = document.getElementById('fDate');
+    if (fDate) fDate.value = todayStr();
 
-    const fDate =
-        document.getElementById('fDate');
-
-    if (fDate) {
-        fDate.value = todayStr();
-    }
-
-
-    // Category grid
-    const catGrid =
-        document.getElementById('catGrid');
-
-    if (catGrid) {
-
-        catGrid.innerHTML =
-            CATEGORIES.map(
-                category => `
-
-                <div
-                    class="cat-item ${
-                        category.id === selectedCategory
-                            ? 'active'
-                            : ''
-                    }"
-                    data-id="${category.id}"
-                >
-
-                    <div style="font-size:18px;">
-                        ${category.icon}
-                    </div>
-
-                    <div>
-                        ${category.label}
-                    </div>
-
-                </div>
-
-            `
-            ).join('');
-
-
-        catGrid
-            .querySelectorAll('.cat-item')
-            .forEach(element => {
-
-                element.addEventListener(
-                    'click',
-                    () => {
-
-                        catGrid
-                            .querySelectorAll(
-                                '.cat-item'
-                            )
-                            .forEach(item =>
-                                item.classList.remove(
-                                    'active'
-                                )
-                            );
-
-                        element.classList.add(
-                            'active'
-                        );
-
-                        selectedCategory =
-                            element.dataset.id;
-
-                    }
-                );
-
-            });
-
-    }
-
-
-    // Category dropdown
-    const resCat =
-        document.getElementById(
-            'resCategory'
-        );
-
-    if (resCat) {
-
-        resCat.innerHTML =
-            CATEGORIES.map(
-                category => `
-
-                <option value="${category.id}">
-                    ${category.icon}
-                    ${category.label}
-                </option>
-
-            `
-            ).join('');
-
-    }
-
-
+    renderCategoryPickers();
     initNavigation();
-
     initIncomeInput();
-
     initManualForm();
-
-    initReceiptUpload();
-
     initExportButtons();
-
     initTaxButton();
-
     initDiagnostics();
-
     initSlipScanner();
+    initMultiScanActions();
+    initChartToggle();
 
+    window.addEventListener('resize', () => {
+        clearTimeout(window.__financeResizeTimer);
+        window.__financeResizeTimer = setTimeout(renderChart, 150);
+    });
 }
 
+function renderCategoryPickers() {
+    const catGrid = document.getElementById('catGrid');
+    if (catGrid) {
+        catGrid.innerHTML = CATEGORIES.map(c => `
+            <div class="cat-item ${c.id === selectedCategory ? 'active' : ''}" data-id="${c.id}">
+                <span class="cat-icon">${c.icon}</span>
+                <span>${escapeHtml(c.label)}</span>
+            </div>
+        `).join('');
+        catGrid.querySelectorAll('.cat-item').forEach(el => {
+            el.addEventListener('click', () => {
+                catGrid.querySelectorAll('.cat-item').forEach(item => item.classList.remove('active'));
+                el.classList.add('active');
+                selectedCategory = el.dataset.id;
+            });
+        });
+    }
+    const resCat = document.getElementById('resCategory');
+    if (resCat) {
+        resCat.innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${c.icon} ${escapeHtml(c.label)}</option>`).join('');
+    }
+}
 
 // ============================================================
-// 7. NAVIGATION
+// 7. NAVIGATION (tabs / dropdown / underline)
 // ============================================================
-
 function initNavigation() {
-
-    const tabs =
-        document.getElementById('tabs');
-
-    const pages =
-        document.querySelectorAll('.page');
-
-    const underline =
-        document.getElementById(
-            'underline'
-        );
-
-    const dropdownMenu =
-        document.getElementById(
-            'dropdownMenu'
-        );
-
-    const dropdownBtn =
-        document.getElementById(
-            'dropdownBtn'
-        );
-
+    const tabs = document.getElementById('tabs');
+    const underline = document.getElementById('underline');
+    const dropdownMenu = document.getElementById('dropdownMenu');
+    const dropdownBtn = document.getElementById('dropdownBtn');
 
     function updateUnderline(btn) {
-
-        if (!btn || !underline || !tabs) {
-            return;
-        }
-
-        const rect =
-            btn.getBoundingClientRect();
-
-        const parentRect =
-            tabs.getBoundingClientRect();
-
-        underline.style.width =
-            `${rect.width}px`;
-
-        underline.style.left =
-            `${rect.left - parentRect.left}px`;
-
+        if (!btn || !underline || !tabs) return;
+        const rect = btn.getBoundingClientRect();
+        const parentRect = tabs.getBoundingClientRect();
+        underline.style.width = `${rect.width}px`;
+        underline.style.left = `${rect.left - parentRect.left}px`;
     }
 
+    document.querySelectorAll('[data-page]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const pageId = btn.dataset.page;
+            document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+            document.getElementById(pageId)?.classList.add('active');
+            document.querySelectorAll('#tabs > button, .dropdown-menu button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
 
-    document
-        .querySelectorAll('[data-page]')
-        .forEach(btn => {
-
-            btn.addEventListener(
-                'click',
-                () => {
-
-                    const pageId =
-                        btn.dataset.page;
-
-                    pages.forEach(
-                        page =>
-                            page.classList.remove(
-                                'active'
-                            )
-                    );
-
-                    const page =
-                        document.getElementById(
-                            pageId
-                        );
-
-                    if (page) {
-                        page.classList.add(
-                            'active'
-                        );
-                    }
-
-
-                    document
-                        .querySelectorAll(
-                            '#tabs button'
-                        )
-                        .forEach(
-                            button =>
-                                button.classList.remove(
-                                    'active'
-                                )
-                        );
-
-
-                    btn.classList.add(
-                        'active'
-                    );
-
-
-                    if (
-                        dropdownMenu &&
-                        dropdownMenu.contains(btn)
-                    ) {
-
-                        dropdownBtn?.classList.add(
-                            'active'
-                        );
-
-                    } else {
-
-                        dropdownMenu?.classList.remove(
-                            'show'
-                        );
-
-                    }
-
-
-                    const underlineBtn =
-                        dropdownMenu &&
-                        dropdownMenu.contains(btn)
-                            ? dropdownBtn
-                            : btn;
-
-                    updateUnderline(
-                        underlineBtn
-                    );
-
-                    renderAll();
-
-                }
-            );
-
+            const inDropdown = dropdownMenu && dropdownMenu.contains(btn);
+            if (inDropdown) {
+                dropdownBtn?.classList.add('active');
+            }
+            dropdownMenu?.classList.remove('show');
+            updateUnderline(inDropdown ? dropdownBtn : btn);
+            renderAll();
         });
-
-
-    dropdownBtn?.addEventListener(
-        'click',
-        event => {
-
-            event.stopPropagation();
-
-            dropdownMenu?.classList.toggle(
-                'show'
-            );
-
-        }
-    );
-
-
-    document.addEventListener(
-        'click',
-        () => {
-
-            dropdownMenu?.classList.remove(
-                'show'
-            );
-
-        }
-    );
-
-
-    setTimeout(
-        () => {
-
-            updateUnderline(
-                tabs?.querySelector(
-                    'button.active'
-                )
-            );
-
-        },
-        100
-    );
-
-}
-
-
-// ============================================================
-// 8. INCOME
-// ============================================================
-
-function initIncomeInput() {
-
-    const incomeInput =
-        document.getElementById(
-            'incomeInput'
-        );
-
-    incomeInput?.addEventListener(
-        'change',
-        async event => {
-
-            const value =
-                parseFloat(
-                    event.target.value
-                ) || 0;
-
-
-            const oldValue =
-                state.income[
-                    state.currentMonth
-                ] || 0;
-
-
-            if (value !== oldValue) {
-
-                const confirmed =
-                    await confirmAction(
-                        'ยืนยันรายรับ?',
-                        `รายรับเดือนนี้ ฿${formatMoney(value)}`,
-                        'บันทึกรายรับ'
-                    );
-
-                if (!confirmed) {
-
-                    event.target.value =
-                        oldValue || '';
-
-                    return;
-
-                }
-
-            }
-
-
-            state.income[
-                state.currentMonth
-            ] = value;
-
-            save();
-
-            addLog(
-                'update_income',
-                {
-                    month:
-                        state.currentMonth,
-                    amount:
-                        value
-                }
-            );
-
-            renderAll();
-
-            showNotification(
-                'บันทึกรายรับเรียบร้อย',
-                'success'
-            );
-
-        }
-    );
-
-}
-
-
-// ============================================================
-// 9. MANUAL TRANSACTION
-// ============================================================
-
-function initManualForm() {
-
-    const form =
-        document.getElementById(
-            'entryForm'
-        );
-
-    if (!form) return;
-
-
-    form.addEventListener(
-        'submit',
-        async event => {
-
-            event.preventDefault();
-
-
-            const date =
-                document.getElementById(
-                    'fDate'
-                )?.value || todayStr();
-
-
-            const amount =
-                parseFloat(
-                    document.getElementById(
-                        'fAmount'
-                    )?.value || 0
-                );
-
-
-            const type =
-                document.querySelector(
-                    'input[name="type"]:checked'
-                )?.value || 'cash';
-
-
-            const note =
-                document.getElementById(
-                    'fNote'
-                )?.value.trim() || '';
-
-
-            if (!amount || amount <= 0) {
-
-                await notifyWarning(
-                    'จำนวนเงินไม่ถูกต้อง',
-                    'กรุณาระบุจำนวนเงินมากกว่า 0'
-                );
-
-                return;
-
-            }
-
-
-            const category =
-                CATEGORIES.find(
-                    c =>
-                        c.id ===
-                        selectedCategory
-                );
-
-
-            const confirmed =
-                await confirmAction(
-
-                    'ยืนยันการบันทึกรายการ?',
-
-                    `วันที่ ${date}
-จำนวนเงิน ฿${formatMoney(amount)}
-หมวดหมู่ ${category?.label || 'อื่นๆ'}
-${note || 'ไม่มีรายละเอียด'}`,
-
-                    'บันทึกรายการ'
-
-                );
-
-
-            if (!confirmed) {
-                return;
-            }
-
-
-            const tx = {
-
-                id: Date.now(),
-
-                date,
-
-                amount,
-
-                category:
-                    selectedCategory,
-
-                type,
-
-                note,
-
-                receipt:
-                    manualReceiptBase64
-
-            };
-
-
-            state.transactions.push(
-                tx
-            );
-
-
-            save();
-
-
-            addLog(
-                'add_transaction',
-                {
-                    date,
-                    amount:
-                        `฿${formatMoney(amount)}`,
-                    category:
-                        category?.label ||
-                        selectedCategory,
-                    note
-                }
-            );
-
-
-            document.getElementById(
-                'fAmount'
-            ).value = '';
-
-
-            document.getElementById(
-                'fNote'
-            ).value = '';
-
-
-            manualReceiptBase64 =
-                null;
-
-
-            const uploadTxt =
-                document.getElementById(
-                    'uploadTxt'
-                );
-
-            if (uploadTxt) {
-
-                uploadTxt.textContent =
-                    '📷 แตะเพื่อแนบรูปสลิปเก็บไว้';
-
-            }
-
-
-            renderAll();
-
-
-            await notifySuccess(
-                'บันทึกรายการเรียบร้อย',
-                `฿${formatMoney(amount)}`
-            );
-
-        }
-    );
-
-}
-
-
-// ============================================================
-// 10. RECEIPT UPLOAD
-// ============================================================
-
-function initReceiptUpload() {
-
-    const uploadBox =
-        document.getElementById(
-            'uploadBox'
-        );
-
-    const fReceipt =
-        document.getElementById(
-            'fReceipt'
-        );
-
-
-    uploadBox?.addEventListener(
-        'click',
-        () => fReceipt?.click()
-    );
-
-
-    fReceipt?.addEventListener(
-        'change',
-        async event => {
-
-            const file =
-                event.target.files?.[0];
-
-            if (!file) return;
-
-
-            if (
-                !file.type.startsWith(
-                    'image/'
-                )
-            ) {
-
-                await notifyError(
-                    'ไฟล์ไม่ถูกต้อง',
-                    'กรุณาเลือกไฟล์รูปภาพ'
-                );
-
-                return;
-
-            }
-
-
-            manualReceiptBase64 =
-                await compressImage(
-                    file,
-                    800,
-                    0.8
-                );
-
-
-            const uploadTxt =
-                document.getElementById(
-                    'uploadTxt'
-                );
-
-            if (uploadTxt) {
-
-                uploadTxt.textContent =
-                    `✅ แนบไฟล์เรียบร้อย (${file.name})`;
-
-            }
-
-        }
-    );
-
-}
-
-
-// ============================================================
-// 11. EXPORT / TAX / TEST
-// ============================================================
-
-function initExportButtons() {
-
-    document
-        .getElementById('exportCsv')
-        ?.addEventListener(
-            'click',
-            exportTransactionsCSV
-        );
-
-
-    document
-        .getElementById('exportLogsBtn')
-        ?.addEventListener(
-            'click',
-            exportLogsCSV
-        );
-
-}
-
-
-function initTaxButton() {
-
-    document
-        .getElementById('taxCalcBtn')
-        ?.addEventListener(
-            'click',
-            async () => {
-
-                const income =
-                    parseFloat(
-                        document.getElementById(
-                            'taxIncome'
-                        )?.value || 0
-                    );
-
-
-                if (!income) {
-
-                    await notifyWarning(
-                        'ยังไม่ได้กรอกรายได้',
-                        'กรุณากรอกรายได้ทั้งปีก่อน'
-                    );
-
-                    return;
-
-                }
-
-
-                const confirmed =
-                    await confirmAction(
-                        'ยืนยันการคำนวณภาษี?',
-                        `รายได้ทั้งปี ฿${formatMoney(income)}`,
-                        'คำนวณภาษี'
-                    );
-
-
-                if (confirmed) {
-                    calculateTax();
-                }
-
-            }
-        );
-
-}
-
-
-function initDiagnostics() {
-
-    document
-        .getElementById('runTestBtn')
-        ?.addEventListener(
-            'click',
-            runSystemDiagnostics
-        );
-
-}
-
-
-// ============================================================
-// 12. SLIP SCANNER
-// ============================================================
-
-function initSlipScanner() {
-
-    const dropzone =
-        document.getElementById(
-            'scanDropzone'
-        );
-
-    const input =
-        document.getElementById(
-            'scanFileInput'
-        );
-
-
-    if (!dropzone || !input) {
-        return;
-    }
-
-
-    input.multiple = true;
-
-
-    dropzone.addEventListener(
-        'click',
-        event => {
-
-            if (
-                event.target === input
-            ) {
-                return;
-            }
-
-            input.click();
-
-        }
-    );
-
-
-    dropzone.addEventListener(
-        'dragover',
-        event => {
-
-            event.preventDefault();
-
-            dropzone.style.borderColor =
-                'var(--good)';
-
-        }
-    );
-
-
-    dropzone.addEventListener(
-        'dragleave',
-        () => {
-
-            dropzone.style.borderColor =
-                'var(--accent)';
-
-        }
-    );
-
-
-    dropzone.addEventListener(
-        'drop',
-        async event => {
-
-            event.preventDefault();
-
-            dropzone.style.borderColor =
-                'var(--accent)';
-
-            const files =
-                Array.from(
-                    event.dataTransfer.files || []
-                )
-                .filter(
-                    file =>
-                        file.type.startsWith(
-                            'image/'
-                        )
-                );
-
-
-            if (!files.length) {
-
-                await notifyWarning(
-                    'ไม่พบรูปภาพ',
-                    'กรุณาลากไฟล์รูปภาพสลิป'
-                );
-
-                return;
-
-            }
-
-
-            if (files.length === 1) {
-
-                await processSlipImage(
-                    files[0]
-                );
-
-            } else {
-
-                await processMultipleSlipImages(
-                    files
-                );
-
-            }
-
-        }
-    );
-
-
-    input.addEventListener(
-        'change',
-        async event => {
-
-            const files =
-                Array.from(
-                    event.target.files || []
-                )
-                .filter(
-                    file =>
-                        file.type.startsWith(
-                            'image/'
-                        )
-                );
-
-
-            if (!files.length) {
-                return;
-            }
-
-
-            if (files.length === 1) {
-
-                await processSlipImage(
-                    files[0]
-                );
-
-            } else {
-
-                await processMultipleSlipImages(
-                    files
-                );
-
-            }
-
-
-            input.value = '';
-
-        }
-    );
-
-
-    document
-        .getElementById(
-            'confirmSaveBtn'
-        )
-        ?.addEventListener(
-            'click',
-            saveSingleScannedReceipt
-        );
-
-
-    document
-        .getElementById(
-            'reScanBtn'
-        )
-        ?.addEventListener(
-            'click',
-            async () => {
-
-                const confirmed =
-                    await confirmAction(
-                        'สแกนใหม่?',
-                        'ข้อมูลที่อ่านได้ในใบนี้จะถูกล้าง',
-                        'สแกนใหม่'
-                    );
-
-                if (confirmed) {
-                    resetScanUI();
-                }
-
-            }
-        );
-
-}
-
-
-// ============================================================
-// 13. SINGLE OCR
-// ============================================================
-
-async function processSlipImage(
-    file
-) {
-
-    if (
-        !file ||
-        !file.type.startsWith('image/')
-    ) {
-
-        await notifyError(
-            'ไฟล์ไม่ถูกต้อง',
-            'กรุณาอัปโหลดรูปสลิปเท่านั้น'
-        );
-
-        return;
-
-    }
-
-
-    const preview =
-        document.getElementById(
-            'scanPreviewImg'
-        );
-
-    const dropzone =
-        document.getElementById(
-            'scanDropzone'
-        );
-
-    const previewBox =
-        document.getElementById(
-            'scanPreviewBox'
-        );
-
-    const resultCard =
-        document.getElementById(
-            'scanResultCard'
-        );
-
-    const progress =
-        document.getElementById(
-            'scanProgressTxt'
-        );
-
-
-    currentScannedImageBase64 =
-        await compressImage(
-            file,
-            1400,
-            0.92
-        );
-
-
-    if (preview) {
-        preview.src =
-            currentScannedImageBase64;
-    }
-
-
-    if (dropzone) {
-        dropzone.style.display =
-            'none';
-    }
-
-
-    if (previewBox) {
-        previewBox.style.display =
-            'flex';
-    }
-
-
-    if (resultCard) {
-        resultCard.style.display =
-            'none';
-    }
-
-
-    try {
-
-        if (progress) {
-
-            progress.textContent =
-                'กำลังเตรียม OCR ภาษาไทย + อังกฤษ...';
-
-        }
-
-
-        const worker =
-            await Tesseract.createWorker(
-                'tha+eng'
-            );
-
-
-        if (progress) {
-
-            progress.textContent =
-                'กำลังอ่านข้อความบนสลิป...';
-
-        }
-
-
-        const result =
-            await worker.recognize(
-                currentScannedImageBase64
-            );
-
-
-        const extractedText =
-            result?.data?.text || '';
-
-
-        await worker.terminate();
-
-
-        if (progress) {
-
-            progress.textContent =
-                'กำลังวิเคราะห์ยอดเงิน วันที่ และข้อมูลผู้โอน...';
-
-        }
-
-
-        const parsed =
-            parseSlipOCRText(
-                extractedText
-            );
-
-
-        fillSingleScanResult(
-            parsed
-        );
-
-
-        document.getElementById(
-            'scannerLine'
-        )?.style.setProperty(
-            'display',
-            'none'
-        );
-
-
-        document.getElementById(
-            'scanStatus'
-        )?.style.setProperty(
-            'display',
-            'none'
-        );
-
-
-        if (resultCard) {
-
-            resultCard.style.display =
-                'block';
-
-        }
-
-
-        if (!parsed.amount) {
-
-            await notifyWarning(
-                'อ่านสลิปแล้ว แต่ไม่พบยอดเงิน',
-                'กรุณาตรวจสอบและกรอกยอดเงินด้วยตนเองก่อนบันทึก'
-            );
-
-        } else {
-
-            await notifySuccess(
-                'อ่านสลิปสำเร็จ',
-                `พบยอดเงิน ฿${formatMoney(parsed.amount)}`
-            );
-
-        }
-
-    } catch (error) {
-
-        console.error(
-            'OCR Error:',
-            error
-        );
-
-
-        await notifyError(
-            'อ่านสลิปไม่สำเร็จ',
-            'ลองใช้รูปที่คมชัดขึ้นหรือถ่ายให้เห็นสลิปทั้งใบ'
-        );
-
-
-        resetScanUI();
-
-    }
-
-}
-
-
-// ============================================================
-// 14. FILL SINGLE RESULT
-// ============================================================
-
-function fillSingleScanResult(
-    data
-) {
-
-    const amount =
-        document.getElementById(
-            'resAmount'
-        );
-
-    const date =
-        document.getElementById(
-            'resDate'
-        );
-
-    const time =
-        document.getElementById(
-            'resTime'
-        );
-
-    const category =
-        document.getElementById(
-            'resCategory'
-        );
-
-    const sender =
-        document.getElementById(
-            'resSender'
-        );
-
-    const receiver =
-        document.getElementById(
-            'resReceiver'
-        );
-
-    const note =
-        document.getElementById(
-            'resNote'
-        );
-
-
-    if (amount) {
-        amount.value =
-            data.amount || '';
-    }
-
-
-    if (date) {
-        date.value =
-            data.date || todayStr();
-    }
-
-
-    if (time) {
-        time.value =
-            data.time || '';
-    }
-
-
-    if (category) {
-        category.value =
-            data.category || 'other';
-    }
-
-
-    if (sender) {
-        sender.value =
-            data.sender || '';
-    }
-
-
-    if (receiver) {
-        receiver.value =
-            data.receiver || '';
-    }
-
-
-    if (note) {
-        note.value =
-            data.note ||
-            'โอนผ่านสลิปธนาคาร';
-    }
-
-}
-
-
-// ============================================================
-// 15. SAVE SINGLE OCR
-// ============================================================
-
-async function saveSingleScannedReceipt() {
-
-    const amount =
-        parseFloat(
-            document.getElementById(
-                'resAmount'
-            )?.value || 0
-        );
-
-
-    const date =
-        document.getElementById(
-            'resDate'
-        )?.value || todayStr();
-
-
-    const time =
-        document.getElementById(
-            'resTime'
-        )?.value || '';
-
-
-    const category =
-        document.getElementById(
-            'resCategory'
-        )?.value || 'other';
-
-
-    const sender =
-        document.getElementById(
-            'resSender'
-        )?.value.trim() || '';
-
-
-    const receiver =
-        document.getElementById(
-            'resReceiver'
-        )?.value.trim() || '';
-
-
-    const note =
-        document.getElementById(
-            'resNote'
-        )?.value.trim() ||
-        'โอนผ่านสลิปธนาคาร';
-
-
-    if (!amount || amount <= 0) {
-
-        await notifyWarning(
-            'ยังไม่มียอดเงิน',
-            'กรุณาตรวจสอบยอดเงินก่อนบันทึก'
-        );
-
-        document.getElementById(
-            'resAmount'
-        )?.focus();
-
-        return;
-
-    }
-
-
-    const confirmed =
-        await confirmAction(
-
-            'ยืนยันบันทึกสลิป?',
-
-            `จำนวนเงิน ฿${formatMoney(amount)}
-วันที่ ${date}
-${time ? `เวลา ${time}` : ''}
-${sender ? `ผู้โอน: ${sender}` : ''}
-${receiver ? `ผู้รับ: ${receiver}` : ''}`,
-
-            'บันทึกสลิป'
-
-        );
-
-
-    if (!confirmed) {
-        return;
-    }
-
-
-    const tx = {
-
-        id: Date.now(),
-
-        date,
-
-        time,
-
-        amount,
-
-        category,
-
-        type: 'transfer',
-
-        note,
-
-        sender,
-
-        receiver,
-
-        receipt:
-            currentScannedImageBase64
-
-    };
-
-
-    state.transactions.push(
-        tx
-    );
-
-
-    save();
-
-
-    addLog(
-        'add_transaction',
-        {
-            date,
-            time,
-            amount:
-                `฿${formatMoney(amount)}`,
-            category:
-                CATEGORIES.find(
-                    c =>
-                        c.id === category
-                )?.label || category,
-            sender,
-            receiver,
-            note:
-                `[สแกนสลิป] ${note}`
-        }
-    );
-
-
-    resetScanUI();
-
-    renderAll();
-
-
-    document
-        .querySelector(
-            '[data-page="transactions"]'
-        )
-        ?.click();
-
-
-    await notifySuccess(
-        'บันทึกสลิปเรียบร้อย',
-        `฿${formatMoney(amount)}`
-    );
-
-}
-
-
-// ============================================================
-// 16. RESET SINGLE SCANNER
-// ============================================================
-
-function resetScanUI() {
-
-    const input =
-        document.getElementById(
-            'scanFileInput'
-        );
-
-    if (input) {
-        input.value = '';
-    }
-
-
-    const dropzone =
-        document.getElementById(
-            'scanDropzone'
-        );
-
-    const preview =
-        document.getElementById(
-            'scanPreviewBox'
-        );
-
-    const result =
-        document.getElementById(
-            'scanResultCard'
-        );
-
-    const scanner =
-        document.getElementById(
-            'scannerLine'
-        );
-
-    const status =
-        document.getElementById(
-            'scanStatus'
-        );
-
-
-    if (dropzone) {
-        dropzone.style.display =
-            'block';
-    }
-
-    if (preview) {
-        preview.style.display =
-            'none';
-    }
-
-    if (result) {
-        result.style.display =
-            'none';
-    }
-
-    if (scanner) {
-        scanner.style.display =
-            'block';
-    }
-
-    if (status) {
-        status.style.display =
-            'flex';
-    }
-
-
-    currentScannedImageBase64 =
-        null;
-
-
-    const fields = [
-        'resAmount',
-        'resDate',
-        'resTime',
-        'resSender',
-        'resReceiver',
-        'resNote'
-    ];
-
-
-    fields.forEach(id => {
-
-        const element =
-            document.getElementById(id);
-
-        if (element) {
-            element.value = '';
-        }
-
     });
 
-}
-
-
-// ============================================================
-// 17. MULTI OCR
-// ============================================================
-
-async function processMultipleSlipImages(
-    files
-) {
-
-    if (!Array.isArray(files)) {
-        files = Array.from(files || []);
-    }
-
-
-    files =
-        files.filter(
-            file =>
-                file.type.startsWith('image/')
-        );
-
-
-    if (!files.length) {
-        return;
-    }
-
-
-    if (files.length > 30) {
-
-        await notifyWarning(
-            'เลือกได้สูงสุด 30 รูป',
-            'ระบบจะใช้ 30 รูปแรก'
-        );
-
-        files =
-            files.slice(0, 30);
-
-    }
-
-
-    multiSlipResults = [];
-
-
-    const results =
-        document.getElementById(
-            'multiScanResults'
-        );
-
-    const progress =
-        document.getElementById(
-            'multiScanProgress'
-        );
-
-    const actions =
-        document.getElementById(
-            'multiScanActions'
-        );
-
-
-    if (results) {
-        results.innerHTML = '';
-    }
-
-    if (actions) {
-        actions.style.display =
-            'none';
-    }
-
-
-    Swal.fire({
-
-        title:
-            'กำลังวิเคราะห์สลิป',
-
-        html:
-            `กำลังเตรียมอ่าน ${files.length} รูป`,
-
-        allowOutsideClick: false,
-
-        allowEscapeKey: false,
-
-        didOpen: () => {
-            Swal.showLoading();
-        }
-
+    dropdownBtn?.addEventListener('click', event => {
+        event.stopPropagation();
+        dropdownMenu?.classList.toggle('show');
     });
+    document.addEventListener('click', () => dropdownMenu?.classList.remove('show'));
 
-
-    try {
-
-        multiSlipWorker =
-            await Tesseract.createWorker(
-                'tha+eng'
-            );
-
-
-        for (
-            let i = 0;
-            i < files.length;
-            i++
-        ) {
-
-            const file =
-                files[i];
-
-
-            if (progress) {
-
-                progress.textContent =
-                    `กำลังอ่านสลิป ${i + 1}/${files.length}: ${file.name}`;
-
-            }
-
-
-            Swal.update({
-
-                html:
-                    `กำลังอ่านสลิป <b>${i + 1}/${files.length}</b>
-                    <br>${escapeHtml(file.name)}`
-
-            });
-
-
-            try {
-
-                const image =
-                    await compressImage(
-                        file,
-                        1400,
-                        0.92
-                    );
-
-
-                const result =
-                    await multiSlipWorker.recognize(
-                        image
-                    );
-
-
-                // แก้ bug เดิม:
-                // ต้องประกาศ extractedText จาก result.data.text
-                const extractedText =
-                    result?.data?.text || '';
-
-
-                const parsed =
-                    parseSlipOCRText(
-                        extractedText
-                    );
-
-
-                multiSlipResults.push({
-
-                    id:
-                        `${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`,
-
-                    fileName:
-                        file.name,
-
-                    image,
-
-                    amount:
-                        parsed.amount || 0,
-
-                    date:
-                        parsed.date ||
-                        todayStr(),
-
-                    time:
-                        parsed.time || '',
-
-                    category:
-                        parsed.category ||
-                        'other',
-
-                    sender:
-                        parsed.sender || '',
-
-                    receiver:
-                        parsed.receiver || '',
-
-                    note:
-                        parsed.note ||
-                        'โอนผ่านสลิปธนาคาร',
-
-                    selected:
-                        Boolean(
-                            parsed.amount &&
-                            parsed.amount > 0
-                        ),
-
-                    rawText:
-                        extractedText,
-
-                    error:
-                        false
-
-                });
-
-            } catch (error) {
-
-                console.error(
-                    'Multi OCR item error:',
-                    error
-                );
-
-
-                multiSlipResults.push({
-
-                    id:
-                        `${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`,
-
-                    fileName:
-                        file.name,
-
-                    image:
-                        null,
-
-                    amount:
-                        0,
-
-                    date:
-                        todayStr(),
-
-                    time:
-                        '',
-
-                    category:
-                        'other',
-
-                    sender:
-                        '',
-
-                    receiver:
-                        '',
-
-                    note:
-                        'อ่านสลิปไม่สำเร็จ — กรุณาตรวจสอบ',
-
-                    selected:
-                        false,
-
-                    rawText:
-                        '',
-
-                    error:
-                        true
-
-                });
-
-            }
-
-        }
-
-    } finally {
-
-        if (multiSlipWorker) {
-
-            try {
-
-                await multiSlipWorker.terminate();
-
-            } catch (error) {
-
-                console.warn(
-                    error
-                );
-
-            }
-
-            multiSlipWorker =
-                null;
-
-        }
-
-
-        Swal.close();
-
-    }
-
-
-    renderMultiScanResults();
-
-
-    const successCount =
-        multiSlipResults.filter(
-            item =>
-                !item.error &&
-                item.amount > 0
-        ).length;
-
-
-    if (
-        successCount ===
-        files.length
-    ) {
-
-        await notifySuccess(
-            'วิเคราะห์สลิปครบแล้ว',
-            `อ่านสำเร็จ ${successCount} ใบ กรุณาตรวจสอบก่อนบันทึก`
-        );
-
-    } else {
-
-        await notifyWarning(
-            'วิเคราะห์เสร็จแล้ว',
-            `อ่านยอดสำเร็จ ${successCount}/${files.length} ใบ`
-        );
-
-    }
-
+    setTimeout(() => updateUnderline(tabs?.querySelector('button.active')), 80);
 }
 
-
-// ============================================================
-// 18. MULTI RESULT UI
-// ============================================================
-
-function renderMultiScanResults() {
-
-    const results =
-        document.getElementById(
-            'multiScanResults'
-        );
-
-    const actions =
-        document.getElementById(
-            'multiScanActions'
-        );
-
-
-    if (!results || !actions) {
-        return;
+function initNetStatus() {
+    const badge = document.getElementById('netStatus');
+    if (!badge) return;
+    function update() {
+        const online = navigator.onLine;
+        badge.textContent = online ? 'ออนไลน์' : 'ออฟไลน์';
+        badge.classList.toggle('offline', !online);
     }
-
-
-    if (!multiSlipResults.length) {
-
-        results.innerHTML = '';
-
-        actions.style.display =
-            'none';
-
-        return;
-
-    }
-
-
-    results.innerHTML =
-        multiSlipResults
-            .map(
-                (item, index) => `
-
-                <div
-                    style="
-                        border:1px solid ${
-                            item.error
-                                ? '#F59E0B'
-                                : '#E5E7EB'
-                        };
-                        border-radius:12px;
-                        padding:10px;
-                        background:#fff;
-                    "
-                >
-
-                    <div
-                        style="
-                            display:flex;
-                            gap:10px;
-                            align-items:flex-start;
-                        "
-                    >
-
-                        ${
-                            item.image
-
-                            ?
-
-                            `
-                            <img
-                                src="${item.image}"
-                                style="
-                                    width:70px;
-                                    height:100px;
-                                    object-fit:cover;
-                                    border-radius:8px;
-                                    border:1px solid #eee;
-                                "
-                            >
-                            `
-
-                            :
-
-                            `
-                            <div
-                                style="
-                                    width:70px;
-                                    height:100px;
-                                    border-radius:8px;
-                                    background:#FFF7ED;
-                                    display:grid;
-                                    place-items:center;
-                                    font-size:26px;
-                                "
-                            >
-                                ⚠️
-                            </div>
-                            `
-                        }
-
-
-                        <div
-                            style="
-                                flex:1;
-                                min-width:0;
-                            "
-                        >
-
-                            <div
-                                style="
-                                    display:flex;
-                                    gap:8px;
-                                    align-items:center;
-                                "
-                            >
-
-                                <input
-                                    type="checkbox"
-                                    ${
-                                        item.selected
-                                            ? 'checked'
-                                            : ''
-                                    }
-                                    onchange="
-                                        toggleMultiScanSelection(
-                                            ${index},
-                                            this.checked
-                                        )
-                                    "
-                                >
-
-                                <strong
-                                    style="
-                                        font-size:13px;
-                                        overflow:hidden;
-                                        text-overflow:ellipsis;
-                                        white-space:nowrap;
-                                    "
-                                >
-                                    ${escapeHtml(
-                                        item.fileName
-                                    )}
-                                </strong>
-
-                            </div>
-
-
-                            <div
-                                style="
-                                    display:grid;
-                                    grid-template-columns:1fr 1fr;
-                                    gap:7px;
-                                    margin-top:8px;
-                                "
-                            >
-
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value="${
-                                        item.amount || ''
-                                    }"
-                                    placeholder="จำนวนเงิน"
-                                    onchange="
-                                        updateMultiScanField(
-                                            ${index},
-                                            'amount',
-                                            this.value
-                                        )
-                                    "
-                                >
-
-
-                                <input
-                                    type="date"
-                                    value="${
-                                        item.date || ''
-                                    }"
-                                    onchange="
-                                        updateMultiScanField(
-                                            ${index},
-                                            'date',
-                                            this.value
-                                        )
-                                    "
-                                >
-
-
-                                <input
-                                    type="time"
-                                    value="${
-                                        item.time || ''
-                                    }"
-                                    onchange="
-                                        updateMultiScanField(
-                                            ${index},
-                                            'time',
-                                            this.value
-                                        )
-                                    "
-                                >
-
-
-                                <select
-                                    onchange="
-                                        updateMultiScanField(
-                                            ${index},
-                                            'category',
-                                            this.value
-                                        )
-                                    "
-                                >
-
-                                    ${
-                                        CATEGORIES
-                                            .map(
-                                                category => `
-
-                                                <option
-                                                    value="${category.id}"
-                                                    ${
-                                                        category.id ===
-                                                        item.category
-                                                            ? 'selected'
-                                                            : ''
-                                                    }
-                                                >
-                                                    ${category.icon}
-                                                    ${category.label}
-                                                </option>
-
-                                            `
-                                            )
-                                            .join('')
-                                    }
-
-                                </select>
-
-
-                                <input
-                                    type="text"
-                                    value="${escapeAttr(
-                                        item.sender
-                                    )}"
-                                    placeholder="ผู้โอน"
-                                    onchange="
-                                        updateMultiScanField(
-                                            ${index},
-                                            'sender',
-                                            this.value
-                                        )
-                                    "
-                                >
-
-
-                                <input
-                                    type="text"
-                                    value="${escapeAttr(
-                                        item.receiver
-                                    )}"
-                                    placeholder="ผู้รับ"
-                                    onchange="
-                                        updateMultiScanField(
-                                            ${index},
-                                            'receiver',
-                                            this.value
-                                        )
-                                    "
-                                >
-
-
-                                <input
-                                    type="text"
-                                    value="${escapeAttr(
-                                        item.note
-                                    )}"
-                                    placeholder="รายละเอียด"
-                                    onchange="
-                                        updateMultiScanField(
-                                            ${index},
-                                            'note',
-                                            this.value
-                                        )
-                                    "
-                                    style="grid-column:1/-1;"
-                                >
-
-                            </div>
-
-
-                            ${
-                                item.error ||
-                                !item.amount
-
-                                ?
-
-                                `
-                                <div
-                                    style="
-                                        font-size:11px;
-                                        color:#B45309;
-                                        margin-top:6px;
-                                    "
-                                >
-                                    ⚠️ ไม่พบยอดเงิน
-                                    กรุณากรอกยอดเงินก่อนเลือกบันทึก
-                                </div>
-                                `
-
-                                :
-
-                                ''
-                            }
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-            `
-            )
-            .join('');
-
-
-    actions.style.display =
-        'flex';
-
+    update();
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
 }
 
-
 // ============================================================
-// 19. MULTI FIELD
+// 8. CATEGORY SELECT (used by OCR result form)
 // ============================================================
-
-function toggleMultiScanSelection(
-    index,
-    checked
-) {
-
-    if (
-        multiSlipResults[index]
-    ) {
-
-        multiSlipResults[index]
-            .selected = checked;
-
-    }
-
+function selectCategory(categoryId) {
+    if (!CATEGORY_MAP[categoryId]) return;
+    selectedCategory = categoryId;
+    document.querySelectorAll('.cat-item').forEach(el => el.classList.toggle('active', el.dataset.id === categoryId));
 }
 
-
-function updateMultiScanField(
-    index,
-    field,
-    value
-) {
-
-    if (
-        !multiSlipResults[index]
-    ) {
-        return;
-    }
-
-
-    if (field === 'amount') {
-
-        multiSlipResults[index][field] =
-            parseFloat(value) || 0;
-
-
-        if (
-            multiSlipResults[index]
-                .amount > 0
-        ) {
-
-            multiSlipResults[index]
-                .error = false;
-
-        }
-
-    } else {
-
-        multiSlipResults[index][field] =
-            value;
-
-    }
-
-}
-
-
 // ============================================================
-// 20. SAVE MULTI OCR
+// 9. MONTH NAVIGATION
 // ============================================================
-
-async function saveAllScannedReceipts() {
-
-    const selected =
-        multiSlipResults.filter(
-            item =>
-                item.selected
-        );
-
-
-    if (!selected.length) {
-
-        await notifyWarning(
-            'ยังไม่ได้เลือกสลิป',
-            'เลือกอย่างน้อย 1 ใบก่อนบันทึก'
-        );
-
-        return;
-
-    }
-
-
-    const invalid =
-        selected.filter(
-            item =>
-                !item.amount ||
-                item.amount <= 0 ||
-                !item.date
-        );
-
-
-    if (invalid.length) {
-
-        await notifyWarning(
-            'ข้อมูลยังไม่ครบ',
-            `${invalid.length} ใบยังไม่มียอดเงินหรือวันที่`
-        );
-
-        return;
-
-    }
-
-
-    const total =
-        selected.reduce(
-            (sum, item) =>
-                sum +
-                Number(
-                    item.amount || 0
-                ),
-            0
-        );
-
-
-    const confirmed =
-        await confirmAction(
-
-            'ยืนยันบันทึกสลิปทั้งหมด?',
-
-            `จำนวน ${selected.length} รายการ
-ยอดรวม ฿${formatMoney(total)}
-
-ระบบจะเพิ่มทั้งหมดลงในรายการรายจ่าย`,
-
-            'ยืนยันบันทึกทั้งหมด'
-
-        );
-
-
-    if (!confirmed) {
-        return;
-    }
-
-
-    const baseId =
-        Date.now();
-
-
-    selected.forEach(
-        (item, index) => {
-
-            const tx = {
-
-                id:
-                    baseId + index,
-
-                date:
-                    item.date,
-
-                time:
-                    item.time || '',
-
-                amount:
-                    Number(
-                        item.amount
-                    ),
-
-                category:
-                    item.category,
-
-                type:
-                    'transfer',
-
-                note:
-                    item.note ||
-                    'โอนผ่านสลิปธนาคาร',
-
-                sender:
-                    item.sender || '',
-
-                receiver:
-                    item.receiver || '',
-
-                receipt:
-                    item.image
-
-            };
-
-
-            state.transactions.push(
-                tx
-            );
-
-
-            addLog(
-                'add_transaction',
-                {
-                    date:
-                        tx.date,
-
-                    time:
-                        tx.time,
-
-                    amount:
-                        `฿${formatMoney(tx.amount)}`,
-
-                    category:
-                        CATEGORIES.find(
-                            category =>
-                                category.id ===
-                                tx.category
-                        )?.label ||
-                        tx.category,
-
-                    sender:
-                        tx.sender,
-
-                    receiver:
-                        tx.receiver,
-
-                    note:
-                        `[สแกนหลายสลิป] ${tx.note}`
-                }
-            );
-
-        }
-    );
-
-
+function shiftMonth(delta) {
+    const [year, month] = state.currentMonth.split('-').map(Number);
+    const date = new Date(year, month - 1 + delta, 1);
+    state.currentMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     save();
-
     renderAll();
-
-    clearMultiScanResults();
-
-
-    document
-        .querySelector(
-            '[data-page="transactions"]'
-        )
-        ?.click();
-
-
-    await notifySuccess(
-        'บันทึกสลิปเรียบร้อย',
-        `${selected.length} รายการ รวม ฿${formatMoney(total)}`
-    );
-
 }
-
-
-// ============================================================
-// 21. CLEAR MULTI
-// ============================================================
-
-async function clearMultiScanResultsConfirm() {
-
-    if (!multiSlipResults.length) {
-        return;
-    }
-
-
-    const confirmed =
-        await confirmAction(
-            'ล้างผลการสแกนทั้งหมด?',
-            'ข้อมูลที่ยังไม่ได้บันทึกจะหายทั้งหมด',
-            'ล้างผลลัพธ์'
-        );
-
-
-    if (confirmed) {
-
-        clearMultiScanResults();
-
-        await notifySuccess(
-            'ล้างผลลัพธ์แล้ว'
-        );
-
-    }
-
-}
-
-
-function clearMultiScanResults() {
-
-    multiSlipResults = [];
-
-
-    const results =
-        document.getElementById(
-            'multiScanResults'
-        );
-
-    const progress =
-        document.getElementById(
-            'multiScanProgress'
-        );
-
-    const actions =
-        document.getElementById(
-            'multiScanActions'
-        );
-
-
-    if (results) {
-        results.innerHTML = '';
-    }
-
-    if (progress) {
-        progress.textContent = '';
-    }
-
-    if (actions) {
-        actions.style.display =
-            'none';
-    }
-
-}
-
-
-// ============================================================
-// 22. OCR PARSER
-// ============================================================
-
-function parseSlipOCRText(
-    originalText
-) {
-
-    const text =
-        normalizeOCRText(
-            originalText
-        );
-
-
-    let amount =
-        extractBestAmount(
-            text
-        );
-
-
-    const date =
-        extractDate(
-            text
-        );
-
-
-    const time =
-        extractTime(
-            text
-        );
-
-
-    const sender =
-        extractPerson(
-            text,
-            [
-                'ผู้โอน',
-                'จาก',
-                'sender',
-                'from'
-            ]
-        );
-
-
-    const receiver =
-        extractPerson(
-            text,
-            [
-                'ผู้รับ',
-                'ถึง',
-                'receiver',
-                'to'
-            ]
-        );
-
-
-    const categoryData =
-        detectCategory(
-            text
-        );
-
-
-    let note =
-        categoryData.note ||
-        'โอนเงิน';
-
-
-    if (
-        sender ||
-        receiver
-    ) {
-
-        const people = [];
-
-        if (sender) {
-            people.push(
-                `ผู้โอน: ${sender}`
-            );
-        }
-
-        if (receiver) {
-            people.push(
-                `ผู้รับ: ${receiver}`
-            );
-        }
-
-        note +=
-            people.length
-                ? ` | ${people.join(' | ')}`
-                : '';
-
-    }
-
-
-    return {
-
-        amount,
-
-        date,
-
-        time,
-
-        sender,
-
-        receiver,
-
-        category:
-            categoryData.category,
-
-        note,
-
-        rawText:
-            text
-
-    };
-
-}
-
-
-// ============================================================
-// 23. AMOUNT EXTRACTION
-// ============================================================
-
-function extractBestAmount(
-    text
-) {
-
-    const candidates = [];
-
-
-    function addCandidate(
-        raw,
-        score,
-        source
-    ) {
-
-        if (!raw) {
-            return;
-        }
-
-
-        let cleaned =
-            String(raw)
-                .replace(/฿/g, '')
-                .replace(/บาท/gi, '')
-                .replace(/\s/g, '')
-                .replace(/,/g, '');
-
-
-        // OCR มักอ่าน comma/period ผิด
-        cleaned =
-            cleaned.replace(
-                /[^\d.]/g,
-                ''
-            );
-
-
-        const value =
-            parseFloat(
-                cleaned
-            );
-
-
-        if (
-            !Number.isFinite(value) ||
-            value <= 0 ||
-            value >= 5000000
-        ) {
-            return;
-        }
-
-
-        candidates.push({
-
-            value,
-
-            score,
-
-            source
-
-        });
-
-    }
-
-
-    // รูปแบบหลัก
-    const moneyRegex =
-        /(?:฿\s*)?(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})|\d+\.\d{2})/g;
-
-
-    for (
-        const match of text.matchAll(
-            moneyRegex
-        )
-    ) {
-
-        const before =
-            text.slice(
-                Math.max(
-                    0,
-                    match.index - 50
-                ),
-                match.index
-            ).toLowerCase();
-
-
-        const after =
-            text.slice(
-                match.index,
-                match.index + 80
-            ).toLowerCase();
-
-
-        let score = 10;
-
-
-        if (
-            /จำนวนเงิน|amount|ยอดเงิน|total|ยอดโอน|ชำระ|payment|baht|บาท|thb/
-                .test(before + after)
-        ) {
-
-            score += 80;
-
-        }
-
-
-        if (
-            /ค่าธรรมเนียม|fee|service/
-                .test(before + after)
-        ) {
-
-            score -= 60;
-
-        }
-
-
-        if (
-            /เลขที่|reference|ref|transaction|บัญชี|account/
-                .test(before + after)
-        ) {
-
-            score -= 40;
-
-        }
-
-
-        if (
-            /\.\d{2}$/.test(
-                match[1]
-            )
-        ) {
-
-            score += 20;
-
-        }
-
-
-        addCandidate(
-            match[1],
-            score,
-            'money'
-        );
-
-    }
-
-
-    // ตัวเลขที่ไม่มี decimal
-    const integerRegex =
-        /(?:฿\s*)?(\d{1,3}(?:[,\s]\d{3})+|\d{4,})/g;
-
-
-    for (
-        const match of text.matchAll(
-            integerRegex
-        )
-    ) {
-
-        const before =
-            text.slice(
-                Math.max(
-                    0,
-                    match.index - 50
-                ),
-                match.index
-            ).toLowerCase();
-
-
-        const after =
-            text.slice(
-                match.index,
-                match.index + 60
-            ).toLowerCase();
-
-
-        let score = 3;
-
-
-        if (
-            /จำนวนเงิน|ยอดเงิน|amount|total|บาท|thb|โอน/
-                .test(
-                    before + after
-                )
-        ) {
-
-            score += 50;
-
-        }
-
-
-        addCandidate(
-            match[1],
-            score,
-            'integer'
-        );
-
-    }
-
-
-    // KBank OCR มักมีรูปแบบ
-    // Amount / จำนวนเงิน แล้วตามด้วยตัวเลขในบรรทัดถัดไป
-    const lines =
-        text
-            .split(/\r?\n/)
-            .map(
-                line => line.trim()
-            )
-            .filter(Boolean);
-
-
-    lines.forEach(
-        (line, index) => {
-
-            if (
-                /จำนวนเงิน|ยอดเงิน|amount|total|โอนสำเร็จ|ชำระ/
-                    .test(
-                        line.toLowerCase()
-                    )
-            ) {
-
-                const context =
-                    [
-                        line,
-                        lines[index + 1] || '',
-                        lines[index + 2] || ''
-                    ].join(' ');
-
-
-                const numbers =
-                    context.match(
-                        /(?:฿\s*)?\d[\d,\s]*(?:\.\d{1,2})?/g
-                    ) || [];
-
-
-                numbers.forEach(
-                    number => {
-
-                        addCandidate(
-                            number,
-                            120,
-                            'label-context'
-                        );
-
-                    }
-                );
-
-            }
-
-        }
-    );
-
-
-    if (!candidates.length) {
-        return null;
-    }
-
-
-    // ลบ duplicate
-    const unique =
-        candidates.filter(
-            (candidate, index, array) =>
-                array.findIndex(
-                    x =>
-                        Math.abs(
-                            x.value -
-                            candidate.value
-                        ) < 0.001
-                ) === index
-        );
-
-
-    unique.sort(
-        (a, b) =>
-            b.score - a.score
-    );
-
-
-    return unique[0]?.value || null;
-
-}
-
-
-// ============================================================
-// 24. DATE
-// ============================================================
-
-function extractDate(
-    text
-) {
-
-    const patterns = [
-
-        /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/,
-
-        /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})/
-
-    ];
-
-
-    for (
-        const pattern of patterns
-    ) {
-
-        const match =
-            text.match(pattern);
-
-
-        if (!match) {
-            continue;
-        }
-
-
-        let day =
-            String(
-                match[1]
-            ).padStart(2, '0');
-
-
-        let month =
-            String(
-                match[2]
-            ).padStart(2, '0');
-
-
-        let year =
-            String(
-                match[3]
-            );
-
-
-        if (year.length === 2) {
-            year =
-                '20' + year;
-        }
-
-
-        if (
-            parseInt(year, 10) >
-            2500
-        ) {
-
-            year =
-                String(
-                    parseInt(
-                        year,
-                        10
-                    ) - 543
-                );
-
-        }
-
-
-        const date =
-            `${year}-${month}-${day}`;
-
-
-        const dateObject =
-            new Date(date);
-
-
-        if (
-            !Number.isNaN(
-                dateObject.getTime()
-            )
-        ) {
-
-            return date;
-
-        }
-
-    }
-
-
-    return todayStr();
-
-}
-
-
-// ============================================================
-// 25. TIME
-// ============================================================
-
-function extractTime(
-    text
-) {
-
-    const match =
-        text.match(
-            /\b([01]?\d|2[0-3])[:.][0-5]\d(?:[:.][0-5]\d)?\b/
-        );
-
-
-    if (!match) {
-        return '';
-    }
-
-
-    const raw =
-        match[0].replace(
-            '.',
-            ':'
-        );
-
-
-    const parts =
-        raw.split(':');
-
-
-    return (
-        String(parts[0])
-            .padStart(2, '0')
-        +
-        ':' +
-        String(parts[1])
-            .padStart(2, '0')
-    );
-
-}
-
-
-// ============================================================
-// 26. PERSON EXTRACTION
-// ============================================================
-
-function extractPerson(
-    text,
-    labels
-) {
-
-    const lines =
-        text
-            .split(/\r?\n/)
-            .map(
-                line =>
-                    line.trim()
-            )
-            .filter(Boolean);
-
-
-    for (
-        let i = 0;
-        i < lines.length;
-        i++
-    ) {
-
-        const line =
-            lines[i];
-
-
-        for (
-            const label of labels
-        ) {
-
-            const regex =
-                new RegExp(
-                    `${label}\\s*[:：]?\\s*(.+)`,
-                    'i'
-                );
-
-
-            const match =
-                line.match(regex);
-
-
-            if (
-                match &&
-                match[1]
-            ) {
-
-                const value =
-                    match[1]
-                        .trim()
-                        .replace(
-                            /\s+/g,
-                            ' '
-                        );
-
-
-                if (
-                    value.length >= 2 &&
-                    value.length <= 100
-                ) {
-
-                    return value;
-
-                }
-
-            }
-
-
-            if (
-                line.toLowerCase()
-                    .includes(
-                        label.toLowerCase()
-                    )
-            ) {
-
-                const next =
-                    lines[i + 1] || '';
-
-
-                if (
-                    next &&
-                    !/\d{4,}/.test(next)
-                ) {
-
-                    return next
-                        .trim();
-
-                }
-
-            }
-
-        }
-
-    }
-
-
-    return '';
-
-}
-
-
-// ============================================================
-// 27. CATEGORY DETECTION
-// ============================================================
-
-function detectCategory(
-    text
-) {
-
-    const lower =
-        text.toLowerCase();
-
-
-    if (
-        [
-            'เซเว่น',
-            '7-eleven',
-            'อาหาร',
-            'food',
-            'grab',
-            'lineman',
-            'ก๋วยเตี๋ยว',
-            'ร้านอาหาร',
-            'cafe',
-            'coffee',
-            'restaurant',
-            'mcdonald',
-            'kfc'
-        ].some(
-            keyword =>
-                lower.includes(
-                    keyword
-                )
-        )
-    ) {
-
-        return {
-            category: 'food',
-            note: 'ค่าอาหาร/เครื่องดื่ม'
-        };
-
-    }
-
-
-    if (
-        [
-            'ptt',
-            'mrt',
-            'bts',
-            'น้ำมัน',
-            'ทางด่วน',
-            'ปตท',
-            'taxi',
-            'grabcar',
-            'bolt'
-        ].some(
-            keyword =>
-                lower.includes(
-                    keyword
-                )
-        )
-    ) {
-
-        return {
-            category: 'transport',
-            note: 'ค่าเดินทาง/น้ำมัน'
-        };
-
-    }
-
-
-    if (
-        [
-            'pea',
-            'mea',
-            'ไฟฟ้า',
-            'ประปา',
-            'ais',
-            'true',
-            'dtac',
-            'ค่าไฟ',
-            'ค่าน้ำ',
-            'internet',
-            'โทรศัพท์'
-        ].some(
-            keyword =>
-                lower.includes(
-                    keyword
-                )
-        )
-    ) {
-
-        return {
-            category: 'bills',
-            note:
-                'ชำระบิลค่าน้ำ/ค่าไฟ/เน็ต'
-        };
-
-    }
-
-
-    if (
-        [
-            'shopee',
-            'lazada',
-            'tiktok',
-            'mall',
-            'central',
-            'shopping'
-        ].some(
-            keyword =>
-                lower.includes(
-                    keyword
-                )
-        )
-    ) {
-
-        return {
-            category: 'shopping',
-            note:
-                'ชอปปิงออนไลน์'
-        };
-
-    }
-
-
-    return {
-        category: 'other',
-        note: 'โอนเงิน'
-    };
-
-}
-
-
-// ============================================================
-// 28. RENDER ALL
-// ============================================================
-
-function renderAll() {
-
-    renderMonthLabels();
-
-    renderDashboard();
-
-    renderTransactions();
-
-    renderAnalysis();
-
-    renderLogs();
-
-    renderIncomeExpenseChart();
-
-}
-
-
-// ============================================================
-// 29. MONTH
-// ============================================================
-
-function shiftMonth(
-    delta
-) {
-
-    const [
-        year,
-        month
-    ] =
-        state.currentMonth
-            .split('-')
-            .map(Number);
-
-
-    const date =
-        new Date(
-            year,
-            month - 1 + delta,
-            1
-        );
-
-
-    const newYear =
-        date.getFullYear();
-
-
-    const newMonth =
-        String(
-            date.getMonth() + 1
-        ).padStart(2, '0');
-
-
-    state.currentMonth =
-        `${newYear}-${newMonth}`;
-
-
-    renderAll();
-
-}
-
-
-// ============================================================
-// 30. MONTH LABEL
-// ============================================================
 
 function renderMonthLabels() {
-
-    const [
-        year,
-        month
-    ] =
-        state.currentMonth
-            .split('-')
-            .map(Number);
-
-
-    const date =
-        new Date(
-            year,
-            month - 1,
-            1
-        );
-
-
-    const text =
-        date.toLocaleDateString(
-            'th-TH',
-            {
-                month: 'long',
-                year: 'numeric'
-            }
-        );
-
-
-    [
-        'monthLabel',
-        'monthLabel2',
-        'monthLabel3'
-    ]
-    .forEach(
-        id => {
-
-            const element =
-                document.getElementById(
-                    id
-                );
-
-            if (element) {
-                element.textContent =
-                    text;
-            }
-
-        }
-    );
-
+    const [year, month] = state.currentMonth.split('-').map(Number);
+    const text = `${THAI_MONTHS[month - 1]} ${year + 543}`;
+    ['monthLabel', 'monthLabel2', 'monthLabel3'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+    });
+    const passbookMonth = document.getElementById('passbookMonth');
+    if (passbookMonth) passbookMonth.textContent = text;
+    const stamp = document.getElementById('passbookStamp');
+    if (stamp) stamp.innerHTML = `${THAI_MONTHS_SHORT[month - 1].replace('.', '')}<br>${String(year + 543).slice(-2)}`;
 }
 
+// ============================================================
+// 10. RENDER ALL
+// ============================================================
+function renderAll() {
+    renderMonthLabels();
+    renderDashboard();
+    renderTransactions();
+    renderAnalysis();
+    renderLogs();
+    renderChart();
+}
 
 // ============================================================
-// 31. DASHBOARD
+// 11. DASHBOARD (passbook + donut)
 // ============================================================
-
 function renderDashboard() {
-
-    const income =
-        Number(
-            state.income[
-                state.currentMonth
-            ] || 0
-        );
-
-
-    const incomeInput =
-        document.getElementById(
-            'incomeInput'
-        );
-
-
-    if (incomeInput) {
-        incomeInput.value =
-            income || '';
+    const income = Number(state.income[state.currentMonth] || 0);
+    const incomeInput = document.getElementById('incomeInput');
+    if (incomeInput && document.activeElement !== incomeInput) {
+        incomeInput.value = income || '';
     }
 
+    const monthTx = state.transactions.filter(tx => String(tx.date || '').startsWith(state.currentMonth));
+    const expense = monthTx.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+    const remaining = income - expense;
 
-    const monthTx =
-        state.transactions.filter(
-            tx =>
-                String(
-                    tx.date || ''
-                ).startsWith(
-                    state.currentMonth
-                )
-        );
-
-
-    const expense =
-        monthTx.reduce(
-            (sum, tx) =>
-                sum +
-                Number(
-                    tx.amount || 0
-                ),
-            0
-        );
-
-
-    const remaining =
-        income - expense;
-
-
-    const expenseElement =
-        document.getElementById(
-            'totalExpenseVal'
-        );
-
-
-    const remainingElement =
-        document.getElementById(
-            'remainingVal'
-        );
-
-
-    if (expenseElement) {
-
-        expenseElement.textContent =
-            `฿${formatMoney(expense)}`;
-
+    const expenseEl = document.getElementById('totalExpenseVal');
+    const remainingEl = document.getElementById('remainingVal');
+    if (expenseEl) expenseEl.textContent = `฿${formatMoney(expense)}`;
+    if (remainingEl) {
+        remainingEl.textContent = `฿${formatMoney(remaining)}`;
+        remainingEl.style.color = remaining >= 0 ? '#A8D8BE' : '#E3AFA0';
     }
 
+    const rangeLabel = document.getElementById('rangeLabel');
+    if (rangeLabel) rangeLabel.textContent = `${monthTx.length} รายการเดือนนี้`;
 
-    if (remainingElement) {
-
-        remainingElement.textContent =
-            `฿${formatMoney(remaining)}`;
-
-        remainingElement.style.color =
-            remaining >= 0
-                ? 'var(--good)'
-                : 'var(--danger)';
-
-    }
-
-
-    renderDonut(
-        monthTx,
-        expense
-    );
-
+    renderDonut(monthTx, expense);
 }
 
-
-// ============================================================
-// 32. DONUT
-// ============================================================
-
-function renderDonut(
-    transactions,
-    total
-) {
-
-    const donut =
-        document.getElementById(
-            'donut'
-        );
-
-    const legend =
-        document.getElementById(
-            'legend'
-        );
-
-
-    if (!donut || !legend) {
-        return;
-    }
-
+function renderDonut(transactions, total) {
+    const donut = document.getElementById('donut');
+    const legend = document.getElementById('legend');
+    if (!donut || !legend) return;
 
     if (total <= 0) {
-
-        donut.style.background =
-            'conic-gradient(var(--border) 0deg 360deg)';
-
-        legend.innerHTML =
-            `
-            <div style="color:var(--muted);">
-                ไม่มีรายการรายจ่ายในเดือนนี้
-            </div>
-            `;
-
+        donut.style.background = 'conic-gradient(var(--paper-line) 0deg 360deg)';
+        legend.innerHTML = `<div class="legend-empty">ยังไม่มีรายจ่ายในเดือนนี้</div>`;
         return;
-
     }
-
 
     const totals = {};
-
-
-    transactions.forEach(
-        tx => {
-
-            totals[tx.category] =
-                (
-                    totals[
-                        tx.category
-                    ] || 0
-                ) +
-                Number(
-                    tx.amount || 0
-                );
-
-        }
-    );
-
-
-    let degree = 0;
-
-    const stops = [];
-
-    let html = '';
-
-
-    CATEGORIES.forEach(
-        category => {
-
-            const amount =
-                totals[
-                    category.id
-                ] || 0;
-
-
-            if (amount <= 0) {
-                return;
-            }
-
-
-            const percent =
-                amount /
-                total *
-                100;
-
-
-            const deg =
-                amount /
-                total *
-                360;
-
-
-            stops.push(
-                `${category.color} ${degree}deg ${degree + deg}deg`
-            );
-
-
-            degree += deg;
-
-
-            html += `
-
-                <div class="legend-item">
-
-                    <span>
-
-                        <span
-                            class="legend-dot"
-                            style="
-                                background:${category.color};
-                            "
-                        ></span>
-
-                        ${category.icon}
-                        ${category.label}
-
-                    </span>
-
-                    <span
-                        style="font-weight:600;"
-                    >
-                        ฿${formatMoney(amount)}
-                        (${percent.toFixed(0)}%)
-                    </span>
-
-                </div>
-
-            `;
-
-        }
-    );
-
-
-    donut.style.background =
-        `conic-gradient(${stops.join(',')})`;
-
-
-    legend.innerHTML =
-        html;
-
-}
-
-
-// ============================================================
-// 33. TRANSACTIONS
-// ============================================================
-
-function renderTransactions() {
-
-    const list =
-        document.getElementById(
-            'txList'
-        );
-
-
-    if (!list) {
-        return;
-    }
-
-
-    const transactions =
-        state.transactions
-            .filter(
-                tx =>
-                    String(
-                        tx.date || ''
-                    ).startsWith(
-                        state.currentMonth
-                    )
-            )
-            .sort(
-                (a, b) =>
-                    new Date(
-                        b.date
-                    ) -
-                    new Date(
-                        a.date
-                    ) ||
-                    Number(b.id) -
-                    Number(a.id)
-            );
-
-
-    if (!transactions.length) {
-
-        list.innerHTML = `
-
-            <div
-                class="card"
-                style="
-                    text-align:center;
-                    color:var(--muted);
-                    padding:30px;
-                "
-            >
-                ไม่มีรายการในเดือนนี้
-            </div>
-
-        `;
-
-        return;
-
-    }
-
-
-    const grouped = {};
-
-
-    transactions.forEach(
-        tx => {
-
-            if (!grouped[tx.date]) {
-                grouped[tx.date] = [];
-            }
-
-            grouped[tx.date].push(
-                tx
-            );
-
-        }
-    );
-
-
-    let html = '';
-
-
-    Object.entries(grouped)
-        .forEach(
-            ([date, items]) => {
-
-                const formatted =
-                    new Date(
-                        date
-                    ).toLocaleDateString(
-                        'th-TH',
-                        {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric'
-                        }
-                    );
-
-
-                html += `
-
-                    <div class="tx-group">
-
-                        <div class="tx-date-title">
-                            ${formatted}
-                        </div>
-
-                `;
-
-
-                items.forEach(
-                    tx => {
-
-                        const category =
-                            CATEGORIES.find(
-                                c =>
-                                    c.id ===
-                                    tx.category
-                            ) ||
-                            CATEGORIES[
-                                CATEGORIES.length - 1
-                            ];
-
-
-                        html += `
-
-                            <div class="tx-card">
-
-                                <div class="tx-icon">
-                                    ${category.icon}
-                                </div>
-
-
-                                <div class="tx-info">
-
-                                    <div class="tx-title">
-                                        ${
-                                            escapeHtml(
-                                                tx.note ||
-                                                category.label
-                                            )
-                                        }
-                                    </div>
-
-
-                                    <div class="tx-sub">
-
-                                        ${
-                                            tx.type === 'cash'
-                                                ? '💵 เงินสด'
-                                                : '💳 โอน/บัตร'
-                                        }
-
-                                        ${
-                                            tx.receipt
-                                                ? ' • 🧾 มีสลิป'
-                                                : ''
-                                        }
-
-                                        ${
-                                            tx.time
-                                                ? ` • ${escapeHtml(tx.time)}`
-                                                : ''
-                                        }
-
-                                    </div>
-
-                                </div>
-
-
-                                <div style="text-align:right;">
-
-                                    <div class="tx-amount">
-                                        -฿${formatMoney(tx.amount)}
-                                    </div>
-
-
-                                    <button
-                                        onclick="deleteTx(${Number(tx.id)})"
-                                        style="
-                                            border:none;
-                                            background:none;
-                                            color:var(--danger);
-                                            font-size:11px;
-                                            cursor:pointer;
-                                            padding:0;
-                                        "
-                                    >
-                                        ลบ
-                                    </button>
-
-                                </div>
-
-                            </div>
-
-                        `;
-
-                    }
-                );
-
-
-                html += `
-                    </div>
-                `;
-
-            }
-        );
-
-
-    list.innerHTML =
-        html;
-
-}
-
-
-// ============================================================
-// 34. DELETE
-// ============================================================
-
-async function deleteTx(
-    id
-) {
-
-    const transaction =
-        state.transactions.find(
-            tx =>
-                Number(tx.id) ===
-                Number(id)
-        );
-
-
-    if (!transaction) {
-        return;
-    }
-
-
-    const confirmed =
-        await confirmAction(
-
-            'ยืนยันการลบรายการ?',
-
-            `จำนวนเงิน ฿${formatMoney(transaction.amount)}
-${transaction.note || ''}
-
-การลบรายการไม่สามารถย้อนกลับได้`,
-
-            'ลบรายการ'
-
-        );
-
-
-    if (!confirmed) {
-        return;
-    }
-
-
-    state.transactions =
-        state.transactions.filter(
-            tx =>
-                Number(tx.id) !==
-                Number(id)
-        );
-
-
-    save();
-
-
-    addLog(
-        'delete_transaction',
-        {
-            id,
-            amount:
-                transaction.amount,
-            note:
-                transaction.note
-        }
-    );
-
-
-    renderAll();
-
-
-    await notifySuccess(
-        'ลบรายการเรียบร้อย'
-    );
-
-}
-
-
-// ============================================================
-// 35. ANALYSIS
-// ============================================================
-
-function renderAnalysis() {
-
-    const income =
-        Number(
-            state.income[
-                state.currentMonth
-            ] || 0
-        );
-
-
-    const transactions =
-        state.transactions.filter(
-            tx =>
-                String(
-                    tx.date || ''
-                ).startsWith(
-                    state.currentMonth
-                )
-        );
-
-
-    const expense =
-        transactions.reduce(
-            (sum, tx) =>
-                sum +
-                Number(
-                    tx.amount || 0
-                ),
-            0
-        );
-
-
-    const needs =
-        transactions
-            .filter(
-                tx =>
-                    [
-                        'food',
-                        'transport',
-                        'bills'
-                    ].includes(
-                        tx.category
-                    )
-            )
-            .reduce(
-                (sum, tx) =>
-                    sum +
-                    Number(
-                        tx.amount || 0
-                    ),
-                0
-            );
-
-
-    const wants =
-        transactions
-            .filter(
-                tx =>
-                    [
-                        'shopping',
-                        'entertainment',
-                        'other'
-                    ].includes(
-                        tx.category
-                    )
-            )
-            .reduce(
-                (sum, tx) =>
-                    sum +
-                    Number(
-                        tx.amount || 0
-                    ),
-                0
-            );
-
-
-    const savings =
-        Math.max(
-            0,
-            income - expense
-        );
-
-
-    const bars =
-        document.getElementById(
-            'barRows'
-        );
-
-
-    if (bars) {
-
-        bars.innerHTML = `
-
-            ${renderBar(
-                'ความจำเป็น (Needs) 50%',
-                needs,
-                income * 0.5
-            )}
-
-            ${renderBar(
-                'ความต้องการ (Wants) 30%',
-                wants,
-                income * 0.3
-            )}
-
-            ${renderBar(
-                'เงินออม/การลงทุน (Savings) 20%',
-                savings,
-                income * 0.2,
-                true
-            )}
-
-        `;
-
-    }
-
-
-    const tips =
-        document.getElementById(
-            'tipsList'
-        );
-
-
-    if (!tips) {
-        return;
-    }
-
-
-    const list = [];
-
-
-    if (!income) {
-
-        list.push(
-            'กรุณากรอกรายรับเดือนนี้ในหน้าภาพรวม'
-        );
-
-    } else {
-
-        if (
-            needs >
-            income * 0.5
-        ) {
-
-            list.push(
-                'ค่าใช้จ่ายจำเป็นเกิน 50% ของรายได้'
-            );
-
-        }
-
-
-        if (
-            wants >
-            income * 0.3
-        ) {
-
-            list.push(
-                'ค่าใช้จ่ายด้านความต้องการเกิน 30%'
-            );
-
-        }
-
-
-        if (
-            savings >=
-            income * 0.2
-        ) {
-
-            list.push(
-                'ยอดเยี่ยม! ออมได้อย่างน้อย 20%'
-            );
-
-        } else {
-
-            list.push(
-                'พยายามเพิ่มเงินออมให้ถึง 20%'
-            );
-
-        }
-
-    }
-
-
-    tips.innerHTML =
-        list
-            .map(
-                item =>
-                    `<li>${escapeHtml(item)}</li>`
-            )
-            .join('');
-
-}
-
-
-// ============================================================
-// 36. BAR
-// ============================================================
-
-function renderBar(
-    label,
-    actual,
-    target,
-    savings = false
-) {
-
-    const percent =
-        target > 0
-            ? Math.min(
-                100,
-                actual /
-                target *
-                100
-            )
-            : 0;
-
-
-    const over =
-        !savings &&
-        actual > target;
-
-
-    return `
-
-        <div class="bar-row">
-
-            <div class="bar-lbl">
-
-                <span>
-                    ${label}
-                </span>
-
-                <span
-                    style="
-                        font-weight:600;
-                        ${
-                            over
-                                ? 'color:var(--danger);'
-                                : ''
-                        }
-                    "
-                >
-                    ฿${formatMoney(actual)}
-                    /
-                    ฿${formatMoney(target)}
-                </span>
-
-            </div>
-
-
-            <div class="bar-bg">
-
-                <div
-                    class="bar-fill"
-                    style="
-                        width:${percent}%;
-                        background:${
-                            over
-                                ? 'var(--danger)'
-                                : 'var(--accent)'
-                        };
-                    "
-                ></div>
-
-            </div>
-
-        </div>
-
-    `;
-
-}
-
-
-// ============================================================
-// 37. LOGS
-// ============================================================
-
-function addLog(
-    action,
-    details = {}
-) {
-
-    if (!Array.isArray(state.logs)) {
-        state.logs = [];
-    }
-
-
-    state.logs.push({
-
-        timestamp:
-            new Date().toISOString(),
-
-        action,
-
-        details
-
+    transactions.forEach(tx => {
+        totals[tx.category] = (totals[tx.category] || 0) + Number(tx.amount || 0);
     });
 
-
-    // จำกัดไม่ให้ LocalStorage โตเกินไป
-    if (
-        state.logs.length >
-        1000
-    ) {
-
-        state.logs =
-            state.logs.slice(-1000);
-
-    }
-
-
-    save();
-
-}
-
-
-function renderLogs() {
-
-    const list =
-        document.getElementById(
-            'logList'
-        );
-
-
-    if (!list) {
-        return;
-    }
-
-
-    if (!state.logs.length) {
-
-        list.innerHTML = `
-
-            <div
-                class="card"
-                style="
-                    text-align:center;
-                    color:var(--muted);
-                "
-            >
-                ยังไม่มีประวัติการใช้งาน
+    let degree = 0;
+    const stops = [];
+    let html = '';
+    CATEGORIES.forEach(category => {
+        const amount = totals[category.id] || 0;
+        if (amount <= 0) return;
+        const percent = (amount / total) * 100;
+        const deg = (amount / total) * 360;
+        stops.push(`${category.color} ${degree}deg ${degree + deg}deg`);
+        degree += deg;
+        html += `
+            <div class="legend-item">
+                <span class="name"><span class="legend-dot" style="background:${category.color};"></span>${category.icon} ${escapeHtml(category.label)}</span>
+                <span class="amt">฿${formatMoney(amount)} · ${percent.toFixed(0)}%</span>
             </div>
-
         `;
-
-        return;
-
-    }
-
-
-    list.innerHTML =
-        state.logs
-            .slice(-15)
-            .reverse()
-            .map(
-                log => `
-
-                    <div
-                        class="tx-card"
-                        style="margin-bottom:6px;"
-                    >
-
-                        <div class="tx-info">
-
-                            <div
-                                class="tx-title"
-                                style="font-size:13px;"
-                            >
-                                ${
-                                    log.action ===
-                                    'add_transaction'
-                                        ? '➕ เพิ่มรายการ'
-                                        : log.action ===
-                                          'delete_transaction'
-                                            ? '🗑️ ลบรายการ'
-                                            : '⚙️ ' +
-                                              escapeHtml(
-                                                  log.action
-                                              )
-                                }
-                            </div>
-
-                            <div class="tx-sub">
-                                ${
-                                    new Date(
-                                        log.timestamp
-                                    ).toLocaleString(
-                                        'th-TH'
-                                    )
-                                }
-                            </div>
-
-                        </div>
-
-
-                        <div
-                            style="
-                                font-size:12px;
-                                color:var(--muted);
-                            "
-                        >
-                            ${escapeHtml(
-                                JSON.stringify(
-                                    log.details || {}
-                                )
-                            )}
-                        </div>
-
-                    </div>
-
-                `
-            )
-            .join('');
-
+    });
+    donut.style.background = `conic-gradient(${stops.join(',')})`;
+    legend.innerHTML = html;
 }
-
 
 // ============================================================
-// 38. CHART
+// 12. CHART (daily / monthly)
 // ============================================================
-
-function initChartControls() {
-
-    const daily =
-        document.getElementById(
-            'chartDailyBtn'
-        );
-
-    const monthly =
-        document.getElementById(
-            'chartMonthlyBtn'
-        );
-
-
-    daily?.addEventListener(
-        'click',
-        () => {
-
-            chartMode =
-                'daily';
-
-            renderIncomeExpenseChart();
-
-        }
-    );
-
-
-    monthly?.addEventListener(
-        'click',
-        () => {
-
-            chartMode =
-                'monthly';
-
-            renderIncomeExpenseChart();
-
-        }
-    );
-
+function initChartToggle() {
+    const dailyBtn = document.getElementById('chartDailyBtn');
+    const monthlyBtn = document.getElementById('chartMonthlyBtn');
+    dailyBtn?.addEventListener('click', () => {
+        chartMode = 'daily';
+        dailyBtn.classList.add('active');
+        monthlyBtn?.classList.remove('active');
+        renderChart();
+    });
+    monthlyBtn?.addEventListener('click', () => {
+        chartMode = 'monthly';
+        monthlyBtn.classList.add('active');
+        dailyBtn?.classList.remove('active');
+        renderChart();
+    });
 }
 
-
-function renderIncomeExpenseChart() {
-
-    const canvas =
-        document.getElementById(
-            'incomeExpenseChart'
-        );
-
-
-    if (!canvas) {
-        return;
+function getChartData() {
+    if (chartMode === 'daily') {
+        const [year, month] = state.currentMonth.split('-').map(Number);
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const labels = [];
+        const income = [];
+        const expense = [];
+        const dailyIncome = Number(state.income[state.currentMonth] || 0) / daysInMonth;
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${state.currentMonth}-${String(day).padStart(2, '0')}`;
+            const dayExpense = state.transactions
+                .filter(tx => tx.date === dateStr)
+                .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+            labels.push(String(day));
+            income.push(dayExpense > 0 || day === daysInMonth ? dailyIncome : 0);
+            expense.push(dayExpense);
+        }
+        return { labels, income, expense };
     }
-
-
-    const parent =
-        canvas.parentElement;
-
-
-    if (!parent) {
-        return;
-    }
-
-
-    const width =
-        Math.max(
-            320,
-            parent.clientWidth
-        );
-
-
-    const height =
-        Math.max(
-            240,
-            parent.clientHeight
-        );
-
-
-    const dpr =
-        window.devicePixelRatio ||
-        1;
-
-
-    canvas.width =
-        width * dpr;
-
-
-    canvas.height =
-        height * dpr;
-
-
-    canvas.style.width =
-        width + 'px';
-
-
-    canvas.style.height =
-        height + 'px';
-
-
-    const ctx =
-        canvas.getContext(
-            '2d'
-        );
-
-
-    ctx.setTransform(
-        dpr,
-        0,
-        0,
-        dpr,
-        0,
-        0
-    );
-
-
-    ctx.clearRect(
-        0,
-        0,
-        width,
-        height
-    );
-
-
-    const data =
-        chartMode === 'daily'
-            ? getDailyChartData()
-            : getMonthlyChartData();
-
-
-    drawChart(
-        ctx,
-        width,
-        height,
-        data
-    );
-
-
-    renderChartSummary(
-        data
-    );
-
-}
-
-
-function getDailyChartData() {
-
-    const [
-        year,
-        month
-    ] =
-        state.currentMonth
-            .split('-')
-            .map(Number);
-
-
-    const days =
-        new Date(
-            year,
-            month,
-            0
-        ).getDate();
-
-
+    // monthly: last 6 months ending at currentMonth
+    const [year, month] = state.currentMonth.split('-').map(Number);
     const labels = [];
-
     const income = [];
-
     const expense = [];
-
-
-    const monthIncome =
-        Number(
-            state.income[
-                state.currentMonth
-            ] || 0
-        );
-
-
-    for (
-        let day = 1;
-        day <= days;
-        day++
-    ) {
-
-        const date =
-            `${state.currentMonth}-${String(day).padStart(2, '0')}`;
-
-
-        labels.push(
-            String(day)
-        );
-
-
-        // รายรับเดิมเป็นรายเดือน
-        // จะแสดงรายรับในวันแรกของเดือน
-        income.push(
-            day === 1
-                ? monthIncome
-                : 0
-        );
-
-
-        const dayExpense =
-            state.transactions
-                .filter(
-                    tx =>
-                        tx.date ===
-                        date
-                )
-                .reduce(
-                    (sum, tx) =>
-                        sum +
-                        Number(
-                            tx.amount || 0
-                        ),
-                    0
-                );
-
-
-        expense.push(
-            dayExpense
-        );
-
+    for (let i = 5; i >= 0; i--) {
+        const date = new Date(year, month - 1 - i, 1);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        labels.push(THAI_MONTHS_SHORT[date.getMonth()]);
+        income.push(Number(state.income[key] || 0));
+        expense.push(state.transactions.filter(tx => String(tx.date || '').startsWith(key))
+            .reduce((sum, tx) => sum + Number(tx.amount || 0), 0));
     }
-
-
-    return {
-        labels,
-        income,
-        expense
-    };
-
+    return { labels, income, expense };
 }
 
-
-function getMonthlyChartData() {
-
-    const labels = [];
-
-    const income = [];
-
-    const expense = [];
-
-
-    const [
-        currentYear
-    ] =
-        state.currentMonth
-            .split('-')
-            .map(Number);
-
-
-    for (
-        let month = 1;
-        month <= 12;
-        month++
-    ) {
-
-        const monthKey =
-            `${currentYear}-${String(month).padStart(2, '0')}`;
-
-
-        labels.push(
-            new Date(
-                currentYear,
-                month - 1,
-                1
-            ).toLocaleDateString(
-                'th-TH',
-                {
-                    month: 'short'
-                }
-            )
-        );
-
-
-        income.push(
-            Number(
-                state.income[
-                    monthKey
-                ] || 0
-            )
-        );
-
-
-        expense.push(
-
-            state.transactions
-                .filter(
-                    tx =>
-                        String(
-                            tx.date || ''
-                        ).startsWith(
-                            monthKey
-                        )
-                )
-                .reduce(
-                    (sum, tx) =>
-                        sum +
-                        Number(
-                            tx.amount || 0
-                        ),
-                    0
-                )
-
-        );
-
-    }
-
-
-    return {
-        labels,
-        income,
-        expense
-    };
-
-}
-
-
-// ============================================================
-// 39. DRAW CHART
-// ============================================================
-
-function drawChart(
-    ctx,
-    width,
-    height,
-    data
-) {
-
-    const padding = {
-
-        top: 25,
-
-        right: 20,
-
-        bottom: 45,
-
-        left: 55
-
-    };
-
-
-    const chartWidth =
-        width -
-        padding.left -
-        padding.right;
-
-
-    const chartHeight =
-        height -
-        padding.top -
-        padding.bottom;
-
-
-    const maxValue =
-        Math.max(
-            1,
-            ...data.income,
-            ...data.expense
-        );
-
-
-    // Grid
-    ctx.font =
-        '11px Sarabun, sans-serif';
-
-
-    ctx.textAlign =
-        'right';
-
-
-    ctx.textBaseline =
-        'middle';
-
-
-    for (
-        let i = 0;
-        i <= 4;
-        i++
-    ) {
-
-        const y =
-            padding.top +
-            chartHeight -
-            (
-                chartHeight *
-                i /
-                4
-            );
-
-
-        ctx.strokeStyle =
-            '#E5E7EB';
-
-
-        ctx.lineWidth = 1;
-
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            padding.left,
-            y
-        );
-
-        ctx.lineTo(
-            width -
-            padding.right,
-            y
-        );
-
-        ctx.stroke();
-
-
-        const value =
-            maxValue *
-            i /
-            4;
-
-
-        ctx.fillStyle =
-            '#6B7280';
-
-
-        ctx.fillText(
-            `฿${Math.round(value).toLocaleString('th-TH')}`,
-            padding.left - 8,
-            y
-        );
-
-    }
-
-
-    const count =
-        data.labels.length;
-
-
-    const groupWidth =
-        chartWidth /
-        Math.max(
-            1,
-            count
-        );
-
-
-    const barWidth =
-        Math.max(
-            2,
-            Math.min(
-                16,
-                groupWidth /
-                3
-            )
-        );
-
-
-    for (
-        let i = 0;
-        i < count;
-        i++
-    ) {
-
-        const center =
-            padding.left +
-            groupWidth *
-            i +
-            groupWidth /
-            2;
-
-
-        const incomeHeight =
-            (
-                data.income[i] /
-                maxValue
-            ) *
-            chartHeight;
-
-
-        const expenseHeight =
-            (
-                data.expense[i] /
-                maxValue
-            ) *
-            chartHeight;
-
-
-        // Income
-        ctx.fillStyle =
-            '#43A047';
-
-
-        ctx.fillRect(
-
-            center -
-            barWidth -
-            1,
-
-            padding.top +
-            chartHeight -
-            incomeHeight,
-
-            barWidth,
-
-            Math.max(
-                1,
-                incomeHeight
-            )
-
-        );
-
-
-        // Expense
-        ctx.fillStyle =
-            '#E53935';
-
-
-        ctx.fillRect(
-
-            center + 1,
-
-            padding.top +
-            chartHeight -
-            expenseHeight,
-
-            barWidth,
-
-            Math.max(
-                1,
-                expenseHeight
-            )
-
-        );
-
-
-        // labels
-        if (
-            count <= 31 ||
-            i % Math.ceil(
-                count / 12
-            ) === 0
-        ) {
-
-            ctx.fillStyle =
-                '#374151';
-
-
-            ctx.textAlign =
-                'center';
-
-
-            ctx.textBaseline =
-                'top';
-
-
-            ctx.font =
-                '10px Sarabun, sans-serif';
-
-
-            ctx.fillText(
-
-                data.labels[i],
-
-                center,
-
-                padding.top +
-                chartHeight +
-                8
-
-            );
-
+function renderChart() {
+    const canvas = document.getElementById('incomeExpenseChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0) return;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const width = rect.width;
+    const height = rect.height;
+    ctx.clearRect(0, 0, width, height);
+
+    const data = getChartData();
+    const padding = { top: 10, right: 8, bottom: 20, left: 8 };
+    const chartHeight = height - padding.top - padding.bottom;
+    const chartWidth = width - padding.left - padding.right;
+    const maxValue = Math.max(1, ...data.income, ...data.expense);
+    const count = data.labels.length;
+    const groupWidth = chartWidth / count;
+    const barWidth = Math.max(2, Math.min(16, groupWidth * 0.32));
+
+    for (let i = 0; i < count; i++) {
+        const center = padding.left + groupWidth * i + groupWidth / 2;
+        const incomeHeight = (data.income[i] / maxValue) * chartHeight;
+        const expenseHeight = (data.expense[i] / maxValue) * chartHeight;
+
+        ctx.fillStyle = '#1E5B47';
+        ctx.fillRect(center - barWidth - 1, padding.top + chartHeight - incomeHeight, barWidth, Math.max(1, incomeHeight));
+
+        ctx.fillStyle = '#A2382B';
+        ctx.fillRect(center + 1, padding.top + chartHeight - expenseHeight, barWidth, Math.max(1, expenseHeight));
+
+        const labelStep = Math.ceil(count / 12);
+        if (i % labelStep === 0) {
+            ctx.fillStyle = '#8B8171';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.font = '10px "IBM Plex Mono", monospace';
+            ctx.fillText(data.labels[i], center, padding.top + chartHeight + 6);
         }
-
     }
 
-
-    // Legend
-    ctx.font =
-        '12px Sarabun, sans-serif';
-
-
-    ctx.textAlign =
-        'left';
-
-
-    ctx.fillStyle =
-        '#43A047';
-
-
-    ctx.fillRect(
-        padding.left,
-        5,
-        10,
-        10
-    );
-
-
-    ctx.fillStyle =
-        '#374151';
-
-
-    ctx.fillText(
-        'รายรับ',
-        padding.left + 15,
-        14
-    );
-
-
-    ctx.fillStyle =
-        '#E53935';
-
-
-    ctx.fillRect(
-        padding.left + 70,
-        5,
-        10,
-        10
-    );
-
-
-    ctx.fillStyle =
-        '#374151';
-
-
-    ctx.fillText(
-        'รายจ่าย',
-        padding.left + 85,
-        14
-    );
-
+    renderChartSummary(data);
 }
 
-
-function renderChartSummary(
-    data
-) {
-
-    const element =
-        document.getElementById(
-            'chartSummary'
-        );
-
-
-    if (!element) {
-        return;
-    }
-
-
-    const income =
-        data.income.reduce(
-            (sum, value) =>
-                sum + value,
-            0
-        );
-
-
-    const expense =
-        data.expense.reduce(
-            (sum, value) =>
-                sum + value,
-            0
-        );
-
-
-    const remaining =
-        income - expense;
-
-
-    element.innerHTML = `
-
-        <div
-            style="
-                padding:9px;
-                border-radius:10px;
-                background:#F7F7F7;
-                text-align:center;
-            "
-        >
-
-            <div
-                style="
-                    font-size:11px;
-                    color:#6B7280;
-                "
-            >
-                รายรับ
-            </div>
-
-            <div
-                style="
-                    font-size:14px;
-                    font-weight:700;
-                    color:#2E7D32;
-                "
-            >
-                ฿${formatMoney(income)}
-            </div>
-
-        </div>
-
-
-        <div
-            style="
-                padding:9px;
-                border-radius:10px;
-                background:#F7F7F7;
-                text-align:center;
-            "
-        >
-
-            <div
-                style="
-                    font-size:11px;
-                    color:#6B7280;
-                "
-            >
-                รายจ่าย
-            </div>
-
-            <div
-                style="
-                    font-size:14px;
-                    font-weight:700;
-                    color:#C62828;
-                "
-            >
-                ฿${formatMoney(expense)}
-            </div>
-
-        </div>
-
-
-        <div
-            style="
-                padding:9px;
-                border-radius:10px;
-                background:#F7F7F7;
-                text-align:center;
-            "
-        >
-
-            <div
-                style="
-                    font-size:11px;
-                    color:#6B7280;
-                "
-            >
-                คงเหลือ
-            </div>
-
-            <div
-                style="
-                    font-size:14px;
-                    font-weight:700;
-                    color:${
-                        remaining >= 0
-                            ? '#2E7D32'
-                            : '#C62828'
-                    };
-                "
-            >
-                ฿${formatMoney(remaining)}
-            </div>
-
-        </div>
-
+function renderChartSummary(data) {
+    const el = document.getElementById('chartSummary');
+    if (!el) return;
+    const income = data.income.reduce((sum, v) => sum + v, 0);
+    const expense = data.expense.reduce((sum, v) => sum + v, 0);
+    const remaining = income - expense;
+    el.innerHTML = `
+        <div class="chart-stat"><div class="lbl">รายรับ</div><div class="val" style="color:var(--pine-dark);">฿${formatMoney(income)}</div></div>
+        <div class="chart-stat"><div class="lbl">รายจ่าย</div><div class="val" style="color:var(--red);">฿${formatMoney(expense)}</div></div>
+        <div class="chart-stat"><div class="lbl">คงเหลือ</div><div class="val" style="color:${remaining >= 0 ? 'var(--pine-dark)' : 'var(--red)'};">฿${formatMoney(remaining)}</div></div>
     `;
-
 }
 
-
 // ============================================================
-// 40. IMAGE COMPRESS
+// 13. INCOME INPUT
 // ============================================================
-
-function compressImage(
-    file,
-    maxSide = 1400,
-    quality = 0.92
-) {
-
-    return new Promise(
-        (resolve, reject) => {
-
-            const reader =
-                new FileReader();
-
-
-            reader.onerror =
-                reject;
-
-
-            reader.onload =
-                event => {
-
-                    const image =
-                        new Image();
-
-
-                    image.onerror =
-                        reject;
-
-
-                    image.onload =
-                        () => {
-
-                            let width =
-                                image.width;
-
-                            let height =
-                                image.height;
-
-
-                            if (
-                                width >
-                                    maxSide ||
-                                height >
-                                    maxSide
-                            ) {
-
-                                if (
-                                    width >
-                                    height
-                                ) {
-
-                                    height =
-                                        Math.round(
-                                            height *
-                                            maxSide /
-                                            width
-                                        );
-
-                                    width =
-                                        maxSide;
-
-                                } else {
-
-                                    width =
-                                        Math.round(
-                                            width *
-                                            maxSide /
-                                            height
-                                        );
-
-                                    height =
-                                        maxSide;
-
-                                }
-
-                            }
-
-
-                            const canvas =
-                                document.createElement(
-                                    'canvas'
-                                );
-
-
-                            canvas.width =
-                                width;
-
-                            canvas.height =
-                                height;
-
-
-                            const context =
-                                canvas.getContext(
-                                    '2d'
-                                );
-
-
-                            context.drawImage(
-                                image,
-                                0,
-                                0,
-                                width,
-                                height
-                            );
-
-
-                            resolve(
-                                canvas.toDataURL(
-                                    'image/jpeg',
-                                    quality
-                                )
-                            );
-
-                        };
-
-
-                    image.src =
-                        event.target.result;
-
-                };
-
-
-            reader.readAsDataURL(
-                file
-            );
-
+function initIncomeInput() {
+    const incomeInput = document.getElementById('incomeInput');
+    incomeInput?.addEventListener('change', async event => {
+        const value = parseFloat(event.target.value) || 0;
+        const oldValue = state.income[state.currentMonth] || 0;
+        if (value !== oldValue) {
+            state.income[state.currentMonth] = value;
+            save();
+            addLog('update_income', { month: state.currentMonth, amount: `฿${formatMoney(value)}` });
+            renderAll();
+            toast('บันทึกรายรับเรียบร้อย');
         }
-    );
-
+    });
 }
 
+// ============================================================
+// 14. MANUAL TRANSACTION
+// ============================================================
+function initManualForm() {
+    const form = document.getElementById('entryForm');
+    if (!form) return;
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const date = document.getElementById('fDate')?.value || todayStr();
+        const amount = parseFloat(document.getElementById('fAmount')?.value || 0);
+        const type = document.querySelector('input[name="type"]:checked')?.value || 'cash';
+        const note = document.getElementById('fNote')?.value.trim() || '';
+
+        if (!amount || amount <= 0) {
+            await notifyWarning('จำนวนเงินไม่ถูกต้อง', 'กรุณาระบุจำนวนเงินมากกว่า 0');
+            return;
+        }
+
+        const category = CATEGORY_MAP[selectedCategory];
+        const tx = {
+            id: Date.now(),
+            date, amount, category: selectedCategory, type, note,
+            sender: '', receiver: ''
+        };
+        state.transactions.push(tx);
+        save();
+        addLog('add_transaction', {
+            date, amount: `฿${formatMoney(amount)}`, category: category?.label || selectedCategory, note
+        });
+
+        document.getElementById('fAmount').value = '';
+        document.getElementById('fNote').value = '';
+        renderAll();
+        await notifySuccess('บันทึกรายการเรียบร้อย', `฿${formatMoney(amount)}`);
+    });
+}
 
 // ============================================================
-// 41. CSV
+// 15. TRANSACTIONS LIST
 // ============================================================
+function renderTransactions() {
+    const list = document.getElementById('txList');
+    if (!list) return;
 
-function exportTransactionsCSV() {
+    const transactions = state.transactions
+        .filter(tx => String(tx.date || '').startsWith(state.currentMonth))
+        .sort((a, b) => (String(b.date || '') + String(b.time || '')).localeCompare(String(a.date || '') + String(a.time || '')) || Number(b.id) - Number(a.id));
 
-    if (!state.transactions.length) {
-
-        notifyInfo(
-            'ไม่มีข้อมูล',
-            'ไม่มีรายการสำหรับส่งออก CSV'
-        );
-
+    if (!transactions.length) {
+        list.innerHTML = `<div class="empty-state"><span class="icon">📖</span>ยังไม่มีรายการในเดือนนี้</div>`;
         return;
-
     }
 
+    const grouped = {};
+    transactions.forEach(tx => {
+        (grouped[tx.date] ||= []).push(tx);
+    });
 
-    let csv =
-        '\uFEFFID,Date,Time,Amount,Category,Type,Sender,Receiver,Note\n';
-
-
-    state.transactions.forEach(
-        tx => {
-
-            csv +=
-                `"${csvEscape(tx.id)}",` +
-                `"${csvEscape(tx.date)}",` +
-                `"${csvEscape(tx.time || '')}",` +
-                `"${csvEscape(tx.amount)}",` +
-                `"${csvEscape(tx.category)}",` +
-                `"${csvEscape(tx.type)}",` +
-                `"${csvEscape(tx.sender || '')}",` +
-                `"${csvEscape(tx.receiver || '')}",` +
-                `"${csvEscape(tx.note || '')}"\n`;
-
-        }
-    );
-
-
-    downloadCSV(
-        csv,
-        `transactions_${state.currentMonth}.csv`
-    );
-
-
-    notifySuccess(
-        'ส่งออก CSV เรียบร้อย'
-    );
-
+    let html = '';
+    Object.entries(grouped).forEach(([date, items]) => {
+        html += `<div class="tx-group"><div class="tx-date-title">${formatThaiDate(date)}</div>`;
+        items.forEach(tx => {
+            const category = CATEGORY_MAP[tx.category] || CATEGORY_MAP.other;
+            const people = tx.sender || tx.receiver
+                ? `<div class="tx-people">${tx.sender ? `ผู้โอน: ${escapeHtml(tx.sender)}` : ''}${tx.sender && tx.receiver ? ' → ' : ''}${tx.receiver ? `ผู้รับ: ${escapeHtml(tx.receiver)}` : ''}</div>`
+                : '';
+            html += `
+                <div class="tx-card" data-id="${tx.id}">
+                    <div class="tx-icon">${category.icon}</div>
+                    <div class="tx-info">
+                        <div class="tx-title">${escapeHtml(tx.note || category.label)}</div>
+                        <div class="tx-sub">${tx.type === 'cash' ? 'เงินสด' : 'โอน/บัตร'}${tx.time ? ` · ${escapeHtml(tx.time)}` : ''}</div>
+                        ${people}
+                    </div>
+                    <div class="tx-amount-col">
+                        <div class="tx-amount">-฿${formatMoney(tx.amount)}</div>
+                        <button class="tx-delete" onclick="deleteTx(${Number(tx.id)})">ลบ</button>
+                    </div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+    });
+    list.innerHTML = html;
 }
 
+async function deleteTx(id) {
+    const transaction = state.transactions.find(tx => Number(tx.id) === Number(id));
+    if (!transaction) return;
+    const category = CATEGORY_MAP[transaction.category];
+    const confirmed = await confirmAction('ยืนยันการลบรายการ?',
+        `฿${formatMoney(transaction.amount)} · ${transaction.note || category?.label || ''}\n\nการลบไม่สามารถย้อนกลับได้`, 'ลบรายการ');
+    if (!confirmed) return;
 
-function exportLogsCSV() {
+    state.transactions = state.transactions.filter(tx => Number(tx.id) !== Number(id));
+    save();
+    addLog('delete_transaction', { amount: `฿${formatMoney(transaction.amount)}`, note: transaction.note || '' });
+    renderAll();
+    toast('ลบรายการเรียบร้อย');
+}
 
-    if (
-        !state.logs ||
-        !state.logs.length
-    ) {
+// ============================================================
+// 16. ANALYSIS (50/30/20)
+// ============================================================
+function renderAnalysis() {
+    const income = Number(state.income[state.currentMonth] || 0);
+    const transactions = state.transactions.filter(tx => String(tx.date || '').startsWith(state.currentMonth));
+    const expense = transactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+    const needs = transactions.filter(tx => ['food', 'transport', 'bills'].includes(tx.category)).reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+    const wants = transactions.filter(tx => ['shopping', 'entertainment', 'other'].includes(tx.category)).reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+    const savings = Math.max(0, income - expense);
 
-        notifyInfo(
-            'ไม่มีข้อมูล',
-            'ไม่มีประวัติกิจกรรม'
-        );
-
-        return;
-
+    const bars = document.getElementById('barRows');
+    if (bars) {
+        bars.innerHTML = [
+            renderBar('ความจำเป็น (Needs) เป้า 50%', needs, income * 0.5),
+            renderBar('ความต้องการ (Wants) เป้า 30%', wants, income * 0.3),
+            renderBar('เงินออม/การลงทุน (Savings) เป้า 20%', savings, income * 0.2, true)
+        ].join('');
     }
 
+    const tips = document.getElementById('tipsList');
+    if (!tips) return;
+    const list = [];
+    if (!income) {
+        list.push('กรอกรายรับเดือนนี้ในหน้าภาพรวมเพื่อดูคำแนะนำที่แม่นยำขึ้น');
+    } else {
+        if (needs > income * 0.5) list.push('ค่าใช้จ่ายจำเป็นเกิน 50% ของรายได้');
+        if (wants > income * 0.3) list.push('ค่าใช้จ่ายด้านความต้องการเกิน 30%');
+        list.push(savings >= income * 0.2 ? 'ออมได้ถึงเป้า 20% แล้ว รักษาระดับนี้ไว้' : 'ลองเพิ่มเงินออมให้ถึง 20% ของรายรับ');
+    }
+    tips.innerHTML = list.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+}
 
-    let csv =
-        '\uFEFFTimestamp,Action,Details\n';
+function renderBar(label, actual, target, isSavings = false) {
+    const percent = target > 0 ? Math.min(100, (actual / target) * 100) : 0;
+    const over = !isSavings && target > 0 && actual > target;
+    return `
+        <div class="bar-row">
+            <div class="bar-lbl">
+                <span class="name">${label}</span>
+                <span class="figures ${over ? 'over' : ''}">฿${formatMoney(actual)} / ฿${formatMoney(target)}</span>
+            </div>
+            <div class="bar-bg"><div class="bar-fill ${over ? 'over' : ''}" style="width:${percent}%;"></div></div>
+        </div>
+    `;
+}
 
-
-    state.logs.forEach(
-        log => {
-
-            csv +=
-                `"${csvEscape(log.timestamp)}",` +
-                `"${csvEscape(log.action)}",` +
-                `"${csvEscape(
-                    JSON.stringify(
-                        log.details || {}
-                    )
-                )}"\n`;
-
+// ============================================================
+// 17. TAX CALCULATOR
+// ============================================================
+function initTaxButton() {
+    document.getElementById('taxCalcBtn')?.addEventListener('click', () => {
+        const income = parseFloat(document.getElementById('taxIncome')?.value || 0);
+        if (!income) {
+            notifyWarning('ยังไม่ได้กรอกรายได้', 'กรุณากรอกรายได้ทั้งปีก่อน');
+            return;
         }
-    );
-
-
-    downloadCSV(
-        csv,
-        'activity_logs.csv'
-    );
-
-
-    notifySuccess(
-        'ส่งออกประวัติเรียบร้อย'
-    );
-
+        calculateTax();
+    });
 }
-
-
-function csvEscape(
-    value
-) {
-
-    return String(
-        value ?? ''
-    ).replace(
-        /"/g,
-        '""'
-    );
-
-}
-
-
-function downloadCSV(
-    content,
-    filename
-) {
-
-    const blob =
-        new Blob(
-            [content],
-            {
-                type:
-                    'text/csv;charset=utf-8;'
-            }
-        );
-
-
-    const url =
-        URL.createObjectURL(
-            blob
-        );
-
-
-    const link =
-        document.createElement(
-            'a'
-        );
-
-
-    link.href =
-        url;
-
-
-    link.download =
-        filename;
-
-
-    document.body.appendChild(
-        link
-    );
-
-
-    link.click();
-
-
-    link.remove();
-
-
-    setTimeout(
-        () =>
-            URL.revokeObjectURL(
-                url
-            ),
-        100
-    );
-
-}
-
-
-// ============================================================
-// 42. TAX
-// ============================================================
 
 function calculateTax() {
-
-    const income =
-        parseFloat(
-            document.getElementById(
-                'taxIncome'
-            )?.value || 0
-        );
-
-
-    const deduct =
-        parseFloat(
-            document.getElementById(
-                'taxDeduct'
-            )?.value || 0
-        );
-
-
-    const netIncome =
-        Math.max(
-            0,
-            income - deduct
-        );
-
-
+    const income = parseFloat(document.getElementById('taxIncome')?.value || 0);
+    const deduct = parseFloat(document.getElementById('taxDeduct')?.value || 0);
+    const netIncome = Math.max(0, income - deduct);
     let tax = 0;
+    if (netIncome > 750000) tax = 65000 + (netIncome - 750000) * 0.20;
+    else if (netIncome > 500000) tax = 27500 + (netIncome - 500000) * 0.15;
+    else if (netIncome > 300000) tax = 7500 + (netIncome - 300000) * 0.10;
+    else if (netIncome > 150000) tax = (netIncome - 150000) * 0.05;
 
-
-    if (
-        netIncome > 500000
-    ) {
-
-        tax +=
-            (
-                netIncome -
-                500000
-            ) *
-            0.15 +
-            25000;
-
-    } else if (
-        netIncome > 300000
-    ) {
-
-        tax +=
-            (
-                netIncome -
-                300000
-            ) *
-            0.10 +
-            7500;
-
-    } else if (
-        netIncome > 150000
-    ) {
-
-        tax +=
-            (
-                netIncome -
-                150000
-            ) *
-            0.05;
-
-    }
-
-
-    const result =
-        document.getElementById(
-            'taxResult'
-        );
-
-
-    if (!result) {
-        return;
-    }
-
-
+    const result = document.getElementById('taxResult');
+    if (!result) return;
     result.innerHTML = `
-
-        <div
-            style="
-                background:var(--accent-light);
-                padding:14px;
-                border-radius:10px;
-                color:var(--accent);
-            "
-        >
-
-            <div>
-                <strong>
-                    เงินได้สุทธิ:
-                </strong>
-
-                ฿${formatMoney(netIncome)}
-            </div>
-
-            <div
-                style="
-                    font-size:16px;
-                    font-weight:700;
-                    margin-top:4px;
-                "
-            >
-
-                <strong>
-                    ภาษีประเมิน:
-                </strong>
-
-                ฿${formatMoney(tax)}
-
-            </div>
-
+        <div class="tax-result">
+            <div class="row"><span>เงินได้สุทธิ</span><span class="val">฿${formatMoney(netIncome)}</span></div>
+            <div class="headline"><span>ภาษีประเมิน</span><span class="val">฿${formatMoney(tax)}</span></div>
         </div>
-
+        <div class="tax-note">ใช้เพื่อประมาณการเบื้องต้นเท่านั้น ไม่ใช่คำแนะนำด้านภาษี</div>
     `;
-
+    addLog('tax_calculation', { income: `฿${formatMoney(income)}`, tax: `฿${formatMoney(tax)}` });
 }
 
+// ============================================================
+// 18. ACTIVITY LOG
+// ============================================================
+const LOG_LABELS = {
+    add_transaction: 'เพิ่มรายการ',
+    delete_transaction: 'ลบรายการ',
+    update_income: 'อัปเดตรายรับ',
+    scan_receipt: 'บันทึกจากสลิป',
+    tax_calculation: 'คำนวณภาษี',
+    system_test: 'ทดสอบระบบ',
+    export_csv: 'ส่งออก CSV',
+    export_logs: 'ส่งออกประวัติ'
+};
+
+function addLog(action, details = {}) {
+    state.logs.push({ timestamp: new Date().toISOString(), action, details });
+    if (state.logs.length > 500) state.logs = state.logs.slice(-500);
+    save();
+}
+
+function renderLogs() {
+    const list = document.getElementById('logList');
+    if (!list) return;
+    if (!state.logs.length) {
+        list.innerHTML = `<div class="empty-state"><span class="icon">🕓</span>ยังไม่มีประวัติการใช้งาน</div>`;
+        return;
+    }
+    list.innerHTML = state.logs.slice(-30).reverse().map(log => {
+        const time = new Date(log.timestamp);
+        const timeStr = Number.isNaN(time.getTime()) ? '' : time.toLocaleString('th-TH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const detail = Object.values(log.details || {}).filter(Boolean).join(' · ');
+        return `
+            <div class="log-item">
+                <div>
+                    <div class="label">${escapeHtml(LOG_LABELS[log.action] || log.action)}</div>
+                    ${detail ? `<div class="detail">${escapeHtml(detail)}</div>` : ''}
+                </div>
+                <div class="time">${timeStr}</div>
+            </div>
+        `;
+    }).join('');
+}
 
 // ============================================================
-// 43. DIAGNOSTICS
+// 19. DIAGNOSTICS
 // ============================================================
+function initDiagnostics() {
+    document.getElementById('runTestBtn')?.addEventListener('click', runSystemDiagnostics);
+}
 
 function runSystemDiagnostics() {
+    const results = document.getElementById('testResultsList');
+    if (!results) return;
 
-    const results =
-        document.getElementById(
-            'testResultsList'
-        );
+    const localStorageOK = (() => {
+        try {
+            localStorage.setItem('__finance_test__', '1');
+            localStorage.removeItem('__finance_test__');
+            return true;
+        } catch (error) { return false; }
+    })();
+    const canvasOK = !!document.createElement('canvas').getContext;
+    const tesseractOK = typeof Tesseract !== 'undefined';
+    const sweetAlertOK = typeof Swal !== 'undefined';
+    const checks = [
+        ['LocalStorage', localStorageOK],
+        ['Canvas', canvasOK],
+        ['Tesseract.js OCR', tesseractOK],
+        ['SweetAlert2', sweetAlertOK]
+    ];
+    const allOK = checks.every(c => c[1]);
 
+    results.innerHTML = checks.map(([name, ok]) => `
+        <div class="diag-row">
+            <span>${escapeHtml(name)}</span>
+            <span class="diag-status ${ok ? 'ok' : 'fail'}">${ok ? 'พร้อมใช้งาน' : 'ไม่พบ'}</span>
+        </div>
+    `).join('') + `<div class="diag-summary ${allOK ? 'ok' : 'fail'}">${allOK ? 'ระบบพื้นฐานพร้อมใช้งาน' : 'พบระบบบางส่วนที่ต้องตรวจสอบ'}</div>`;
 
-    if (!results) {
+    addLog('system_test', { result: allOK ? 'ผ่าน' : 'พบปัญหา' });
+    toast('ทดสอบระบบเสร็จแล้ว');
+}
+
+// ============================================================
+// 20. CSV EXPORT
+// ============================================================
+function initExportButtons() {
+    document.getElementById('exportCsv')?.addEventListener('click', exportTransactionsCSV);
+    document.getElementById('exportLogsBtn')?.addEventListener('click', exportLogsCSV);
+}
+
+function downloadCSV(content, filename) {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+}
+
+function exportTransactionsCSV() {
+    if (!state.transactions.length) {
+        notifyInfo('ไม่มีข้อมูล', 'ไม่มีรายการสำหรับส่งออก CSV');
+        return;
+    }
+    let csv = '\uFEFFID,Date,Time,Amount,Category,Type,Sender,Receiver,Note\n';
+    state.transactions.forEach(tx => {
+        csv += `"${csvEscape(tx.id)}","${csvEscape(tx.date)}","${csvEscape(tx.time || '')}","${csvEscape(tx.amount)}","${csvEscape(tx.category)}","${csvEscape(tx.type)}","${csvEscape(tx.sender || '')}","${csvEscape(tx.receiver || '')}","${csvEscape(tx.note || '')}"\n`;
+    });
+    downloadCSV(csv, `transactions_${state.currentMonth}.csv`);
+    addLog('export_csv', { count: `${state.transactions.length} รายการ` });
+    notifySuccess('ส่งออก CSV เรียบร้อย');
+}
+
+function exportLogsCSV() {
+    if (!state.logs.length) {
+        notifyInfo('ไม่มีข้อมูล', 'ไม่มีประวัติกิจกรรม');
+        return;
+    }
+    let csv = '\uFEFFTimestamp,Action,Details\n';
+    state.logs.forEach(log => {
+        csv += `"${csvEscape(log.timestamp)}","${csvEscape(log.action)}","${csvEscape(JSON.stringify(log.details || {}))}"\n`;
+    });
+    downloadCSV(csv, 'activity_logs.csv');
+    notifySuccess('ส่งออกประวัติเรียบร้อย');
+}
+
+// ============================================================
+// 21. IMAGE HELPERS
+// ============================================================
+function compressImage(file, maxSide = 1600, quality = 0.9) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = reject;
+        reader.onload = event => {
+            const image = new Image();
+            image.onerror = reject;
+            image.onload = () => {
+                let width = image.width;
+                let height = image.height;
+                if (width > maxSide || height > maxSide) {
+                    if (width > height) { height = Math.round(height * maxSide / width); width = maxSide; }
+                    else { width = Math.round(width * maxSide / height); height = maxSide; }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                canvas.getContext('2d').drawImage(image, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            image.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+function enhanceSlipForOCR(base64) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onerror = reject;
+        image.onload = () => {
+            try {
+                const maxWidth = 1800;
+                const scale = Math.min(1.5, maxWidth / image.width);
+                const width = Math.max(1, Math.round(image.width * scale));
+                const height = Math.max(1, Math.round(image.height * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(image, 0, 0, width, height);
+                const imageData = ctx.getImageData(0, 0, width, height);
+                const data = imageData.data;
+                const contrast = 1.45;
+                const intercept = 128 * (1 - contrast);
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                    const adjusted = Math.max(0, Math.min(255, gray * contrast + intercept));
+                    data[i] = data[i + 1] = data[i + 2] = adjusted;
+                }
+                ctx.putImageData(imageData, 0, 0);
+                resolve(canvas.toDataURL('image/jpeg', 0.95));
+            } catch (error) { reject(error); }
+        };
+        image.src = base64;
+    });
+}
+
+// ============================================================
+// 22. OCR PARSING — bank detection, amount, date, time, people
+// ============================================================
+function detectBank(text) {
+    const lower = String(text || '').toLowerCase();
+    if (['kbank', 'kasikorn', 'กสิกร', 'k plus', 'k+', 'make by'].some(w => lower.includes(w))) return 'kbank';
+    return 'unknown';
+}
+
+function extractBestAmount(text, bank = 'unknown') {
+    const source = normalizeOCRText(text);
+    const candidates = [];
+
+    function addCandidate(raw, score) {
+        if (!raw) return;
+        let cleaned = String(raw).trim().replace(/฿/g, '').replace(/บาท/gi, '').replace(/[\s,]/g, '').replace(/[^\d.]/g, '');
+        const dotCount = (cleaned.match(/\./g) || []).length;
+        if (dotCount > 1) {
+            const parts = cleaned.split('.');
+            const decimal = parts.pop();
+            cleaned = parts.join('') + '.' + decimal;
+        }
+        const value = Number(cleaned);
+        if (!Number.isFinite(value) || value <= 0 || value >= 5000000) return;
+        if (Number.isInteger(value) && !/[฿]|บาท|,\d{3}|\.\d{2}/.test(String(raw))) score -= 18;
+        candidates.push({ value, score });
+    }
+
+    const lines = source.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (bank === 'kbank') {
+        const amountLabels = ['จำนวนเงิน', 'จำนวน', 'ยอดเงิน', 'ยอดโอน', 'amount', 'total', 'โอนเงินสำเร็จ'];
+        lines.forEach((line, index) => {
+            if (!amountLabels.some(l => line.toLowerCase().includes(l))) return;
+            (line.match(/(?:฿\s*)?[\d][\d,\s]*(?:\.\d{1,2})?/g) || []).forEach(raw => addCandidate(raw, 250));
+            for (let offset = 1; offset <= 2; offset++) {
+                const next = lines[index + offset] || '';
+                if (!next || /เลขที่|เลขอ้างอิง|reference|ref|transaction|บัญชี|account|ค่าธรรมเนียม|fee|พร้อมเพย์|promptpay|วันที่|เวลา|date|time/i.test(next)) continue;
+                (next.match(/(?:฿\s*)?[\d][\d,\s]*\.\d{1,2}/g) || []).forEach(raw => addCandidate(raw, offset === 1 ? 235 : 215));
+            }
+        });
+    }
+
+    const moneyRegex = /(?:฿\s*)?(\d{1,3}(?:[,\s]\d{3})*\.\d{2}|\d+\.\d{2})/g;
+    for (const match of source.matchAll(moneyRegex)) {
+        const before = source.slice(Math.max(0, match.index - 70), match.index).toLowerCase();
+        const after = source.slice(match.index, match.index + 100).toLowerCase();
+        let score = 55;
+        if (/จำนวนเงิน|ยอดเงิน|ยอดโอน|amount|total|payment|ชำระ|บาท|baht|thb/.test(before + after)) score += 80;
+        if (/ค่าธรรมเนียม|fee|เลขที่|reference|ref|บัญชี|account|promptpay|พร้อมเพย์/.test(before + after)) score -= 100;
+        if (/วันที่|date|\b20\d{2}\b|\b25\d{2}\b|เวลา|time/.test(before + after)) score -= 90;
+        addCandidate(match[1], score);
+    }
+
+    if (!candidates.length) return null;
+    const unique = [];
+    candidates.forEach(c => {
+        const existing = unique.find(u => Math.abs(u.value - c.value) < 0.001);
+        if (existing) existing.score = Math.max(existing.score, c.score);
+        else unique.push({ ...c });
+    });
+    unique.sort((a, b) => b.score - a.score);
+    return unique[0]?.value || null;
+}
+
+function extractDate(text) {
+    const source = normalizeOCRText(text);
+    const thaiMonths = {
+        'ม.ค.': '01', 'มกราคม': '01', 'ก.พ.': '02', 'กุมภาพันธ์': '02', 'มี.ค.': '03', 'มีนาคม': '03',
+        'เม.ย.': '04', 'เมษายน': '04', 'พ.ค.': '05', 'พฤษภาคม': '05', 'มิ.ย.': '06', 'มิถุนายน': '06',
+        'ก.ค.': '07', 'กรกฎาคม': '07', 'ส.ค.': '08', 'สิงหาคม': '08', 'ก.ย.': '09', 'กันยายน': '09',
+        'ต.ค.': '10', 'ตุลาคม': '10', 'พ.ย.': '11', 'พฤศจิกายน': '11', 'ธ.ค.': '12', 'ธันวาคม': '12'
+    };
+    const thaiDateRegex = /(\d{1,2})\s+(ม\.ค\.|มกราคม|ก\.พ\.|กุมภาพันธ์|มี\.ค\.|มีนาคม|เม\.ย\.|เมษายน|พ\.ค\.|พฤษภาคม|มิ\.ย\.|มิถุนายน|ก\.ค\.|กรกฎาคม|ส\.ค\.|สิงหาคม|ก\.ย\.|กันยายน|ต\.ค\.|ตุลาคม|พ\.ย\.|พฤศจิกายน|ธ\.ค\.|ธันวาคม)\s+(\d{4})/i;
+    const thaiMatch = source.match(thaiDateRegex);
+    if (thaiMatch) {
+        const day = String(thaiMatch[1]).padStart(2, '0');
+        const month = thaiMonths[thaiMatch[2]];
+        let year = parseInt(thaiMatch[3], 10);
+        if (year > 2500) year -= 543;
+        const date = `${year}-${month}-${day}`;
+        if (!Number.isNaN(new Date(date).getTime())) return date;
+    }
+    const patterns = [/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/, /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})\b/];
+    for (const pattern of patterns) {
+        const match = source.match(pattern);
+        if (!match) continue;
+        const day = String(match[1]).padStart(2, '0');
+        const month = String(match[2]).padStart(2, '0');
+        let year = String(match[3]);
+        if (year.length === 2) year = '20' + year;
+        if (parseInt(year, 10) > 2500) year = String(parseInt(year, 10) - 543);
+        const date = `${year}-${month}-${day}`;
+        if (!Number.isNaN(new Date(date).getTime())) return date;
+    }
+    return '';
+}
+
+function extractTime(text) {
+    const match = String(text || '').match(/\b([01]?\d|2[0-3])[:.][0-5]\d(?:[:.][0-5]\d)?\b/);
+    if (!match) return '';
+    const parts = match[0].replace('.', ':').split(':');
+    return `${String(parts[0]).padStart(2, '0')}:${String(parts[1]).padStart(2, '0')}`;
+}
+
+function normalizePersonName(name) {
+    if (!name) return '';
+    let value = String(name).replace(/\s+/g, ' ').trim();
+    value = value.replace(/^(ผู้โอน|ผู้ส่ง|ผู้ชำระ|ผู้จ่าย|จาก|sender|from)\s*[:：\-]?\s*/i, '');
+    value = value.replace(/^(ผู้รับ|ผู้รับเงิน|ผู้รับโอน|ถึง|receiver|to)\s*[:：\-]?\s*/i, '');
+    if (/^[\d\s.,\-_/]+$/.test(value)) return '';
+    const invalidWords = ['kbank', 'kasikorn', 'กสิกรไทย', 'promptpay', 'พร้อมเพย์', 'reference', 'transaction', 'เลขที่รายการ', 'บัญชี', 'account', 'ref'];
+    const lower = value.toLowerCase();
+    if (invalidWords.some(w => lower.includes(w))) return '';
+    const letters = value.match(/[A-Za-zก-๙]/g);
+    if (!letters || letters.length < 2) return '';
+    return value.length > 80 ? value.slice(0, 80).trim() : value;
+}
+
+function scorePersonName(name) {
+    let score = 0;
+    const words = name.split(/\s+/).filter(Boolean);
+    if (words.length >= 2 && words.length <= 6) score += 3;
+    if (/^(นาย|นาง|นางสาว|เด็กชาย|เด็กหญิง|mr\.?|mrs\.?|ms\.?)/i.test(name)) score += 3;
+    if (/[ก-๙]/.test(name)) score += 2;
+    if (name.length >= 4 && name.length <= 60) score += 2;
+    const digitCount = (name.match(/\d/g) || []).length;
+    score += digitCount === 0 ? 2 : -digitCount * 2;
+    if (/\d{3,}/.test(name)) score -= 8;
+    return score;
+}
+
+function chooseBetterPersonName(current, candidate) {
+    const a = normalizePersonName(current);
+    const b = normalizePersonName(candidate);
+    if (!a) return b;
+    if (!b) return a;
+    if (a.toLowerCase().includes(b.toLowerCase()) && a.length >= b.length) return a;
+    if (b.toLowerCase().includes(a.toLowerCase()) && b.length >= a.length) return b;
+    const scoreA = scorePersonName(a);
+    const scoreB = scorePersonName(b);
+    if (scoreB > scoreA) return b;
+    if (scoreA > scoreB) return a;
+    return b.length > a.length ? b : a;
+}
+
+function extractPerson(text, labels) {
+    const lines = normalizeOCRText(text).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const candidates = [];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        for (const label of labels) {
+            const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const match = line.match(new RegExp(`${escaped}\\s*[:：\\-]?\\s*(.+)$`, 'i'));
+            if (match && match[1]) {
+                const name = normalizePersonName(match[1]);
+                if (name) candidates.push(name);
+            }
+            if (line.toLowerCase().includes(label.toLowerCase())) {
+                const name = normalizePersonName(lines[i + 1] || '');
+                if (name) candidates.push(name);
+            }
+        }
+    }
+    if (!candidates.length) return '';
+    return candidates.reduce((best, c) => chooseBetterPersonName(best, c), '');
+}
+
+function extractPeople(text) {
+    const lines = normalizeOCRText(text).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    let sender = '';
+    let receiver = '';
+    const arrowIndexes = [];
+    lines.forEach((line, i) => { if (/[↓→➜➡]/.test(line)) arrowIndexes.push(i); });
+    for (const idx of arrowIndexes) {
+        const parts = lines[idx].split(/[↓→➜➡]/);
+        if (parts.length >= 2) {
+            const left = normalizePersonName(parts[0]);
+            const right = normalizePersonName(parts.slice(1).join(' '));
+            if (left && !sender) sender = left;
+            if (right && !receiver) receiver = right;
+        }
+    }
+    for (let i = 0; i < lines.length; i++) {
+        if (/^[↓→➜➡]$/.test(lines[i])) {
+            const before = normalizePersonName(lines[i - 1] || '');
+            const after = normalizePersonName(lines[i + 1] || '');
+            if (before && !sender) sender = before;
+            if (after && !receiver) receiver = after;
+        }
+    }
+    if (!sender) sender = extractPerson(text, ['ผู้โอน', 'ผู้ส่ง', 'ผู้ชำระ', 'ผู้จ่าย', 'จาก', 'sender', 'from']);
+    if (!receiver) receiver = extractPerson(text, ['ผู้รับ', 'ผู้รับเงิน', 'ผู้รับโอน', 'ถึง', 'receiver', 'to']);
+    return { sender: normalizePersonName(sender), receiver: normalizePersonName(receiver) };
+}
+
+function detectCategory(text) {
+    const lines = normalizeOCRText(text).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const meaningful = lines.filter(l => !/เลขที่รายการ|เลขที่อ้างอิง|reference|transaction|account|บัญชี|promptpay|พร้อมเพย์|xxx[-\s]|^\d{5,}$/i.test(l)).join(' ');
+    const lower = meaningful.toLowerCase();
+    if (['เซเว่น', '7-eleven', 'อาหาร', 'food', 'grab', 'lineman', 'ก๋วยเตี๋ยว', 'ร้านอาหาร', 'cafe', 'coffee', 'restaurant', 'mcdonald', 'kfc'].some(k => lower.includes(k))) {
+        return { category: 'food', note: 'ค่าอาหาร/เครื่องดื่ม' };
+    }
+    if (['ptt', 'mrt', 'bts', 'น้ำมัน', 'ทางด่วน', 'ปตท', 'taxi', 'grabcar', 'bolt'].some(k => lower.includes(k))) {
+        return { category: 'transport', note: 'ค่าเดินทาง/น้ำมัน' };
+    }
+    if (['pea', 'mea', 'ไฟฟ้า', 'ประปา', 'ais', 'true', 'dtac', 'ค่าไฟ', 'ค่าน้ำ', 'internet', 'โทรศัพท์'].some(k => lower.includes(k))) {
+        return { category: 'bills', note: 'ชำระบิลค่าน้ำ/ค่าไฟ/เน็ต' };
+    }
+    if (['shopee', 'lazada', 'tiktok', 'mall', 'central', 'shopping'].some(k => lower.includes(k))) {
+        return { category: 'shopping', note: 'ชอปปิงออนไลน์' };
+    }
+    return { category: 'other', note: 'โอนเงิน' };
+}
+
+function parseSlipOCRText(text) {
+    const bank = detectBank(text);
+    const { sender, receiver } = extractPeople(text);
+    const { category, note } = detectCategory(text);
+    return {
+        bank,
+        amount: extractBestAmount(text, bank),
+        date: extractDate(text),
+        time: extractTime(text),
+        sender, receiver, category, note,
+        rawText: text
+    };
+}
+
+function mergeKBankParsedResults(results) {
+    const valid = (results || []).filter(Boolean);
+    if (!valid.length) return {};
+    const amountCounts = new Map();
+    valid.map(r => Number(r.amount || 0)).filter(v => v > 0).forEach(v => {
+        const key = v.toFixed(2);
+        amountCounts.set(key, (amountCounts.get(key) || 0) + 1);
+    });
+    const consensusAmount = [...amountCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const sender = valid.map(r => r.sender).filter(Boolean).reduce((best, n) => chooseBetterPersonName(best, n), '');
+    const receiver = valid.map(r => r.receiver).filter(Boolean).reduce((best, n) => chooseBetterPersonName(best, n), '');
+    const dates = valid.map(r => r.date).filter(Boolean);
+    const times = valid.map(r => r.time).filter(Boolean);
+    const best = valid.slice().sort((a, b) => {
+        const score = r => (r.sender ? 4 : 0) + (r.receiver ? 4 : 0) + (r.amount ? 4 : 0) + (r.date ? 2 : 0) + (r.time ? 1 : 0);
+        return score(b) - score(a);
+    })[0];
+    return {
+        ...best,
+        amount: consensusAmount ? Number(consensusAmount) : (best.amount || 0),
+        sender, receiver,
+        date: dates[0] || '',
+        time: times[0] || ''
+    };
+}
+
+// ============================================================
+// 23. SINGLE SLIP SCAN
+// ============================================================
+function initSlipScanner() {
+    const dropzone = document.getElementById('scanDropzone');
+    const input = document.getElementById('scanFileInput');
+    if (!dropzone || !input) return;
+
+    dropzone.addEventListener('click', event => {
+        if (event.target === input) return;
+        input.click();
+    });
+    dropzone.addEventListener('dragover', event => {
+        event.preventDefault();
+        dropzone.style.borderColor = 'var(--brass)';
+    });
+    dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = 'var(--pine)'; });
+    dropzone.addEventListener('drop', async event => {
+        event.preventDefault();
+        dropzone.style.borderColor = 'var(--pine)';
+        const files = Array.from(event.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
+        await handleSelectedFiles(files);
+    });
+    input.addEventListener('change', async event => {
+        const files = Array.from(event.target.files || []).filter(f => f.type.startsWith('image/'));
+        await handleSelectedFiles(files);
+        input.value = '';
+    });
+
+    document.getElementById('confirmSaveBtn')?.addEventListener('click', saveSingleScannedReceipt);
+    document.getElementById('reScanBtn')?.addEventListener('click', async () => {
+        const confirmed = await confirmAction('สแกนใหม่?', 'ข้อมูลที่อ่านได้ในใบนี้จะถูกล้าง', 'สแกนใหม่');
+        if (confirmed) resetScanUI();
+    });
+}
+
+async function handleSelectedFiles(files) {
+    if (!files.length) return;
+    if (files.length === 1) {
+        await processSlipImage(files[0]);
+    } else {
+        await processMultipleSlipImages(files);
+    }
+}
+
+async function processSlipImage(file) {
+    if (!file || !file.type.startsWith('image/')) {
+        await notifyError('ไฟล์ไม่ถูกต้อง', 'กรุณาอัปโหลดรูปสลิปเท่านั้น');
+        return;
+    }
+    const preview = document.getElementById('scanPreviewImg');
+    const dropzone = document.getElementById('scanDropzone');
+    const previewBox = document.getElementById('scanPreviewBox');
+    const resultCard = document.getElementById('scanResultCard');
+    const progress = document.getElementById('scanProgressTxt');
+    const scannerLine = document.getElementById('scannerLine');
+    const scanStatus = document.getElementById('scanStatus');
+
+    currentScannedImageBase64 = await compressImage(file, 1800, 0.94);
+    if (preview) preview.src = currentScannedImageBase64;
+    if (dropzone) dropzone.style.display = 'none';
+    if (previewBox) previewBox.style.display = 'flex';
+    if (resultCard) resultCard.style.display = 'none';
+    if (scannerLine) scannerLine.style.display = 'block';
+    if (scanStatus) scanStatus.style.display = 'flex';
+
+    let worker = null;
+    try {
+        if (progress) progress.textContent = 'กำลังอ่านข้อความบนสลิป...';
+        worker = await Tesseract.createWorker('tha+eng');
+
+        const primaryResult = await worker.recognize(currentScannedImageBase64);
+        const primaryText = primaryResult?.data?.text || '';
+        let parsed = parseSlipOCRText(primaryText);
+
+        if (parsed.bank === 'kbank') {
+            if (progress) progress.textContent = 'กำลังตรวจสอบยอดและชื่อผู้โอน/ผู้รับ...';
+            try {
+                const enhancedImage = await enhanceSlipForOCR(currentScannedImageBase64);
+                const enhancedResult = await worker.recognize(enhancedImage);
+                const enhancedText = enhancedResult?.data?.text || '';
+                parsed = mergeKBankParsedResults([parsed, parseSlipOCRText(enhancedText)]);
+            } catch (error) {
+                console.warn('Enhanced OCR pass failed:', error);
+            }
+        }
+
+        await worker.terminate();
+        worker = null;
+
+        if (progress) progress.textContent = 'กำลังตรวจสอบข้อมูลก่อนแสดงผล...';
+        fillSingleScanResult(parsed);
+        if (scannerLine) scannerLine.style.display = 'none';
+        if (scanStatus) scanStatus.style.display = 'none';
+        if (resultCard) resultCard.style.display = 'block';
+
+        const missing = [];
+        if (!parsed.amount) missing.push('จำนวนเงิน');
+        if (!parsed.sender) missing.push('ผู้โอน');
+        if (!parsed.receiver) missing.push('ผู้รับ');
+        if (missing.length) {
+            await notifyWarning('อ่านสลิปแล้ว แต่ข้อมูลบางส่วนยังไม่ชัด', `กรุณาตรวจสอบ: ${missing.join(', ')} ก่อนบันทึก`);
+        } else {
+            await notifySuccess('อ่านและตรวจสอบสลิปสำเร็จ', `฿${formatMoney(parsed.amount)} · ${parsed.sender} → ${parsed.receiver}`);
+        }
+    } catch (error) {
+        console.error('OCR Error:', error);
+        if (worker) { try { await worker.terminate(); } catch (_) {} }
+        await notifyError('อ่านสลิปไม่สำเร็จ', 'ลองใช้รูปที่คมชัดขึ้นหรือถ่ายให้เห็นสลิปทั้งใบ');
+        resetScanUI();
+    }
+}
+
+function fillSingleScanResult(data) {
+    const setVal = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
+    setVal('resAmount', data.amount || '');
+    setVal('resDate', data.date || todayStr());
+    setVal('resTime', data.time || '');
+    setVal('resCategory', data.category || 'other');
+    setVal('resSender', data.sender || '');
+    setVal('resReceiver', data.receiver || '');
+    setVal('resNote', data.note || 'โอนผ่านสลิปธนาคาร');
+}
+
+async function saveSingleScannedReceipt() {
+    const amount = parseFloat(document.getElementById('resAmount')?.value || 0);
+    const date = document.getElementById('resDate')?.value || todayStr();
+    const time = document.getElementById('resTime')?.value || '';
+    const category = document.getElementById('resCategory')?.value || 'other';
+    const sender = document.getElementById('resSender')?.value.trim() || '';
+    const receiver = document.getElementById('resReceiver')?.value.trim() || '';
+    const note = document.getElementById('resNote')?.value.trim() || 'โอนผ่านสลิปธนาคาร';
+
+    if (!amount || amount <= 0) {
+        await notifyWarning('ยังไม่มียอดเงิน', 'กรุณาตรวจสอบยอดเงินก่อนบันทึก');
+        document.getElementById('resAmount')?.focus();
         return;
     }
 
+    const tx = { id: Date.now(), date, time, amount, category, type: 'transfer', note, sender, receiver };
+    state.transactions.push(tx);
+    save();
+    addLog('scan_receipt', {
+        amount: `฿${formatMoney(amount)}`, date,
+        people: sender || receiver ? `${sender} → ${receiver}` : ''
+    });
+    await notifySuccess('บันทึกสลิปเรียบร้อย', `฿${formatMoney(amount)}`);
+    resetScanUI();
+    renderAll();
+}
 
-    const localStorageOK =
-        (() => {
+function resetScanUI() {
+    currentScannedImageBase64 = null;
+    const set = (id, prop, value) => { const el = document.getElementById(id); if (el) el[prop] = value; };
+    set('scanResultCard', 'style', 'display:none;');
+    set('scanPreviewBox', 'style', 'display:none;');
+    set('scanDropzone', 'style', 'display:block;');
+    const preview = document.getElementById('scanPreviewImg');
+    if (preview) preview.removeAttribute('src');
+    set('scanProgressTxt', 'textContent', '');
+    ['resAmount', 'resDate', 'resTime', 'resSender', 'resReceiver', 'resNote'].forEach(id => set(id, 'value', ''));
+    set('resCategory', 'value', 'other');
+}
 
+// ============================================================
+// 24. MULTI SLIP SCAN
+// ============================================================
+function initMultiScanActions() {
+    document.getElementById('multiScanSelectBtn')?.addEventListener('click', () => {
+        document.getElementById('scanFileInput')?.click();
+    });
+    document.getElementById('saveAllScansBtn')?.addEventListener('click', saveAllScannedReceipts);
+    document.getElementById('clearAllScansBtn')?.addEventListener('click', clearMultiScanResultsConfirm);
+}
+
+async function processMultipleSlipImages(files) {
+    multiSlipItems = files.map((file, i) => ({ id: `${Date.now()}_${i}`, file, base64: null, status: 'pending', parsed: null, error: null }));
+    renderMultiScanResults();
+
+    const progress = document.getElementById('multiScanProgress');
+    let worker = null;
+    try {
+        worker = await Tesseract.createWorker('tha+eng');
+        for (let i = 0; i < multiSlipItems.length; i++) {
+            const item = multiSlipItems[i];
+            if (progress) progress.textContent = `กำลังอ่านสลิป ${i + 1} / ${multiSlipItems.length}...`;
             try {
-
-                const key =
-                    '__finance_test__';
-
-                localStorage.setItem(
-                    key,
-                    '1'
-                );
-
-                localStorage.removeItem(
-                    key
-                );
-
-                return true;
-
+                item.base64 = await compressImage(item.file, 1800, 0.94);
+                const result = await worker.recognize(item.base64);
+                const text = result?.data?.text || '';
+                let parsed = parseSlipOCRText(text);
+                if (parsed.bank === 'kbank') {
+                    try {
+                        const enhanced = await enhanceSlipForOCR(item.base64);
+                        const enhancedResult = await worker.recognize(enhanced);
+                        parsed = mergeKBankParsedResults([parsed, parseSlipOCRText(enhancedResult?.data?.text || '')]);
+                    } catch (_) { /* keep primary parse */ }
+                }
+                item.parsed = parsed;
+                item.status = parsed.amount ? 'ok' : 'warn';
             } catch (error) {
-
-                return false;
-
+                console.error('Multi-scan OCR error:', error);
+                item.status = 'error';
+                item.error = 'อ่านไม่สำเร็จ';
             }
-
-        })();
-
-
-    const canvasOK =
-        !!document.createElement(
-            'canvas'
-        ).getContext;
-
-
-    const tesseractOK =
-        typeof Tesseract !==
-        'undefined';
-
-
-    const sweetAlertOK =
-        typeof Swal !==
-        'undefined';
-
-
-    results.innerHTML = `
-
-        <div
-            style="
-                font-size:13px;
-                padding:10px;
-                background:#F5F5F5;
-                border-radius:8px;
-                line-height:1.8;
-            "
-        >
-
-            <div>
-                ${
-                    localStorageOK
-                        ? '✅'
-                        : '❌'
-                }
-                LocalStorage
-            </div>
-
-
-            <div>
-                ${
-                    canvasOK
-                        ? '✅'
-                        : '❌'
-                }
-                Canvas
-            </div>
-
-
-            <div>
-                ${
-                    tesseractOK
-                        ? '✅'
-                        : '❌'
-                }
-                Tesseract.js OCR
-            </div>
-
-
-            <div>
-                ${
-                    sweetAlertOK
-                        ? '✅'
-                        : '❌'
-                }
-                SweetAlert2
-            </div>
-
-
-            <div
-                style="
-                    color:var(--good);
-                    font-weight:700;
-                    margin-top:6px;
-                "
-            >
-                ${
-                    localStorageOK &&
-                    canvasOK &&
-                    tesseractOK &&
-                    sweetAlertOK
-                        ? 'ระบบพื้นฐานพร้อมใช้งาน'
-                        : 'พบระบบบางส่วนที่ต้องตรวจสอบ'
-                }
-            </div>
-
-        </div>
-
-    `;
-
-
-    notifySuccess(
-        'ทดสอบระบบเสร็จแล้ว'
-    );
-
-}
-
-
-// ============================================================
-// 44. ESCAPE HTML
-// ============================================================
-
-function escapeHtml(
-    value
-) {
-
-    return String(
-        value ?? ''
-    ).replace(
-        /[&<>'"]/g,
-        character => ({
-
-            '&':
-                '&amp;',
-
-            '<':
-                '&lt;',
-
-            '>':
-                '&gt;',
-
-            "'":
-                '&#39;',
-
-            '"':
-                '&quot;'
-
-        }[character])
-    );
-
-}
-
-
-function escapeAttr(
-    value
-) {
-
-    return escapeHtml(
-        value
-    );
-
-}
-
-
-// ============================================================
-// 45. ENHANCEMENTS INIT
-// ============================================================
-
-function initEnhancements() {
-
-    initChartControls();
-
-    window.addEventListener(
-        'resize',
-        () => {
-
-            clearTimeout(
-                window.__financeResizeTimer
-            );
-
-
-            window.__financeResizeTimer =
-                setTimeout(
-                    () =>
-                        renderIncomeExpenseChart(),
-                    150
-                );
-
+            renderMultiScanResults();
         }
-    );
-
-
-    const saveAll =
-        document.getElementById(
-            'saveAllScansBtn'
-        );
-
-
-    saveAll?.addEventListener(
-        'click',
-        saveAllScannedReceipts
-    );
-
-
-    const clearAll =
-        document.getElementById(
-            'clearAllScansBtn'
-        );
-
-
-    clearAll?.addEventListener(
-        'click',
-        clearMultiScanResultsConfirm
-    );
-
-
-    const multiSelect =
-        document.getElementById(
-            'multiScanSelectBtn'
-        );
-
-
-    multiSelect?.addEventListener(
-        'click',
-        () => {
-
-            document
-                .getElementById(
-                    'scanFileInput'
-                )
-                ?.click();
-
-        }
-    );
-
+    } finally {
+        if (worker) { try { await worker.terminate(); } catch (_) {} }
+        if (progress) progress.textContent = `อ่านเสร็จแล้ว ${multiSlipItems.length} รายการ ตรวจสอบก่อนบันทึก`;
+    }
 }
 
+function renderMultiScanResults() {
+    const container = document.getElementById('multiScanResults');
+    const actions = document.getElementById('multiScanActions');
+    if (!container) return;
+    if (!multiSlipItems.length) {
+        container.innerHTML = '';
+        if (actions) actions.style.display = 'none';
+        return;
+    }
+    container.innerHTML = multiSlipItems.map((item, index) => {
+        const statusIcon = item.status === 'pending' ? '⏳' : item.status === 'ok' ? '✅' : item.status === 'warn' ? '⚠️' : '❌';
+        const amountText = item.parsed?.amount ? `฿${formatMoney(item.parsed.amount)}` : (item.status === 'pending' ? 'กำลังอ่าน...' : 'ไม่พบยอดเงิน');
+        const peopleText = item.parsed && (item.parsed.sender || item.parsed.receiver) ? ` · ${item.parsed.sender || '?'} → ${item.parsed.receiver || '?'}` : '';
+        return `
+            <div class="multi-scan-item ${item.status === 'error' ? 'error' : ''}">
+                ${item.base64 ? `<img src="${item.base64}" alt="สลิป ${index + 1}">` : `<div class="tx-icon">🧾</div>`}
+                <div class="info">
+                    <div class="name">สลิป ${index + 1} · ${escapeHtml(item.file.name)}</div>
+                    <div class="meta">${amountText}${peopleText}</div>
+                </div>
+                <div class="status">${statusIcon}</div>
+            </div>
+        `;
+    }).join('');
+    if (actions) actions.style.display = multiSlipItems.some(i => i.status === 'ok' || i.status === 'warn') ? 'flex' : 'none';
+}
+
+async function saveAllScannedReceipts() {
+    const savable = multiSlipItems.filter(i => (i.status === 'ok' || i.status === 'warn') && i.parsed?.amount);
+    if (!savable.length) {
+        await notifyWarning('ยังไม่มีรายการที่บันทึกได้', 'ต้องมีอย่างน้อยหนึ่งใบที่อ่านยอดเงินได้');
+        return;
+    }
+    const confirmed = await confirmAction('ยืนยันบันทึกทั้งหมด?', `จะบันทึก ${savable.length} รายการ`, 'บันทึกทั้งหมด');
+    if (!confirmed) return;
+
+    savable.forEach(item => {
+        const p = item.parsed;
+        state.transactions.push({
+            id: Date.now() + Math.random(),
+            date: p.date || todayStr(), time: p.time || '', amount: p.amount,
+            category: p.category || 'other', type: 'transfer',
+            note: p.note || 'โอนผ่านสลิปธนาคาร', sender: p.sender || '', receiver: p.receiver || ''
+        });
+    });
+    save();
+    addLog('scan_receipt', { count: `${savable.length} รายการจากการสแกนหลายใบ` });
+    await notifySuccess('บันทึกทั้งหมดเรียบร้อย', `${savable.length} รายการ`);
+    multiSlipItems = [];
+    renderMultiScanResults();
+    const progress = document.getElementById('multiScanProgress');
+    if (progress) progress.textContent = '';
+    renderAll();
+}
+
+async function clearMultiScanResultsConfirm() {
+    if (!multiSlipItems.length) return;
+    const confirmed = await confirmAction('ล้างผลลัพธ์การสแกน?', 'รายการที่อ่านไว้จะหายไปทั้งหมด', 'ล้างผลลัพธ์');
+    if (!confirmed) return;
+    multiSlipItems = [];
+    renderMultiScanResults();
+    const progress = document.getElementById('multiScanProgress');
+    if (progress) progress.textContent = '';
+}
 
 // ============================================================
 // END
